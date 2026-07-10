@@ -41,5 +41,12 @@ literal source of truth once Phase 1 lands.
 
 ## Divergences from CLAUDE.md
 
-None yet. Any place where live API reality (Phase 2) diverges from CLAUDE.md's assumed field
-shapes will be recorded here with the actual behavior and the adaptation made.
+None confirmed yet. **Open item**: the exact field shapes for the `userStatus`,
+`submissionDetails`, and `recentAcSubmissionList` GraphQL queries in `client.py` are
+reconstructed from well-known reverse-engineered LeetCode schemas (CLAUDE.md names the query
+surface but not every field). They have not been exercised against the live API yet — `login`'s
+`validate_session()` call is the first live check, gated on the user supplying real
+`LEETCODE_SESSION`/`csrftoken` cookies. Any mismatch found there (or later, when
+`submissionDetails`/`recentAcSubmissionList` are first driven for real in Phase 3) will be fixed
+in `client.py` and logged here with the actual shape observed. REST `/api/submissions/` parsing
+is taken verbatim from CLAUDE.md's explicit field list and is not in question.

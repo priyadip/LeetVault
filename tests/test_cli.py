@@ -12,6 +12,12 @@ def test_help_lists_all_commands() -> None:
         assert command in result.output
 
 
-def test_login_stub_runs() -> None:
-    result = runner.invoke(app, ["login"])
+def test_status_runs_when_logged_out() -> None:
+    result = runner.invoke(app, ["status"])
+    assert result.exit_code == 0
+    assert "Not logged in" in result.output
+
+
+def test_logout_runs() -> None:
+    result = runner.invoke(app, ["logout"])
     assert result.exit_code == 0

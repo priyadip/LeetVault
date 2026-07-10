@@ -1,20 +1,148 @@
-"""Credential storage (OS keyring) and LeetCode session validation.
-
-# FUTURE: filled in during Phase 2.
-"""
+"""Credential storage (OS keyring) and LeetCode session validation."""
 
 from __future__ import annotations
 
+import contextlib
+from dataclasses import dataclass
+from datetime import UTC, datetime
+
+import jwt
+import keyring
+import typer
+from keyring.errors import PasswordDeleteError
 from rich.console import Console
+
+from leetvault.client import LeetCodeClient, LeetCodeCredentials
+
+SERVICE_NAME = "leetvault"
+GITHUB_PAT_KEY = "github_pat"
+
+
+def _session_key(site: str) -> str:
+    return f"leetcode_session:{site}"
+
+
+def _csrftoken_key(site: str) -> str:
+    return f"leetcode_csrftoken:{site}"
+
+
+@dataclass
+class StoredCredentials:
+    leetcode_session: str
+    csrftoken: str
+
+
+def store_leetcode_credentials(site: str, leetcode_session: str, csrftoken: str) -> None:
+    keyring.set_password(SERVICE_NAME, _session_key(site), leetcode_session)
+    keyring.set_password(SERVICE_NAME, _csrftoken_key(site), csrftoken)
+
+
+def load_leetcode_credentials(site: str) -> StoredCredentials | None:
+    session = keyring.get_password(SERVICE_NAME, _session_key(site))
+    csrftoken = keyring.get_password(SERVICE_NAME, _csrftoken_key(site))
+    if session is None or csrftoken is None:
+        return None
+    return StoredCredentials(leetcode_session=session, csrftoken=csrftoken)
+
+
+def clear_leetcode_credentials(site: str) -> None:
+    for key in (_session_key(site), _csrftoken_key(site)):
+        with contextlib.suppress(PasswordDeleteError):
+            keyring.delete_password(SERVICE_NAME, key)
+
+
+def store_github_pat(pat: str) -> None:
+    keyring.set_password(SERVICE_NAME, GITHUB_PAT_KEY, pat)
+
+
+def load_github_pat() -> str | None:
+    return keyring.get_password(SERVICE_NAME, GITHUB_PAT_KEY)
+
+
+def clear_github_pat() -> None:
+    with contextlib.suppress(PasswordDeleteError):
+        keyring.delete_password(SERVICE_NAME, GITHUB_PAT_KEY)
+
+
+def decode_session_expiry(leetcode_session: str) -> datetime | None:
+    try:
+        payload = jwt.decode(leetcode_session, options={"verify_signature": False})
+    except jwt.PyJWTError:
+        return None
+    exp = payload.get("exp")
+    if exp is None:
+        return None
+    return datetime.fromtimestamp(exp, tz=UTC)
 
 
 def run_login(console: Console) -> None:
-    console.print("[yellow]login: not yet implemented (Phase 2)[/yellow]")
+    from leetvault.config import ConfigStore
+
+    store = ConfigStore()
+    site = store.get("site") or "com"
+    console.print(f"[bold]leetvault login[/bold] (site: {site})")
+    console.print(
+        "Paste the LEETCODE_SESSION and csrftoken cookie values from a signed-in "
+        "leetcode.com browser session (DevTools -> Application -> Cookies)."
+    )
+    leetcode_session = typer.prompt("LEETCODE_SESSION", hide_input=True)
+    csrftoken = typer.prompt("csrftoken", hide_input=True)
+
+    credentials = LeetCodeCredentials(leetcode_session=leetcode_session, csrftoken=csrftoken)
+    with LeetCodeClient(credentials, site=site) as client:
+        try:
+            user = client.validate_session()
+        except Exception as exc:
+            console.print(f"[red]Login validation failed:[/red] {exc}")
+            raise typer.Exit(code=1) from exc
+
+    if not user.is_signed_in:
+        console.print("[red]Those cookies did not produce a signed-in session.[/red]")
+        raise typer.Exit(code=1)
+
+    store_leetcode_credentials(site, leetcode_session, csrftoken)
+    expiry = decode_session_expiry(leetcode_session)
+    expiry_note = f", expires {expiry.isoformat()}" if expiry else ""
+    console.print(
+        f"[green]Logged in as {user.username}[/green]{expiry_note}. "
+        "Credentials stored in the OS keyring."
+    )
 
 
 def run_status(console: Console) -> None:
-    console.print("[yellow]status: not yet implemented (Phase 2)[/yellow]")
+    from leetvault.config import ConfigStore
+
+    store = ConfigStore()
+    site = store.get("site") or "com"
+    creds = load_leetcode_credentials(site)
+    if creds is None:
+        console.print(f"[yellow]Not logged in for site '{site}'. Run `leetvault login`.[/yellow]")
+        return
+
+    expiry = decode_session_expiry(creds.leetcode_session)
+    now = datetime.now(tz=UTC)
+    if expiry is None:
+        console.print("[yellow]Could not decode session expiry from the stored token.[/yellow]")
+    elif expiry <= now:
+        console.print(
+            f"[red]Session expired at {expiry.isoformat()}. Run `leetvault login` again.[/red]"
+        )
+    else:
+        remaining = expiry - now
+        console.print(
+            f"[green]Session valid[/green], expires {expiry.isoformat()} "
+            f"({remaining.days}d remaining)."
+        )
+
+    pat = load_github_pat()
+    pat_note = "[green]stored[/green]" if pat else "[yellow]not stored[/yellow]"
+    console.print(f"GitHub PAT: {pat_note}")
 
 
 def run_logout(console: Console) -> None:
-    console.print("[yellow]logout: not yet implemented (Phase 2)[/yellow]")
+    from leetvault.config import ConfigStore
+
+    store = ConfigStore()
+    site = store.get("site") or "com"
+    clear_leetcode_credentials(site)
+    console.print(f"[green]Removed stored LeetCode credentials for site '{site}'.[/green]")
