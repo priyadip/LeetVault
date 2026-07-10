@@ -28,7 +28,21 @@ One-way-door decisions get flagged and stopped on instead of logged here.
 
 ## Phase 1 — Data layer
 
-_(filled in when started)_
+- **Models**: literal translation of CLAUDE.md's schema into SQLAlchemy 2.0 declarative style
+  (`DeclarativeBase`/`Mapped`/`mapped_column`). `problem_topics` is both the M2M association table
+  (referenced via `secondary="problem_topics"` string) and its own mapped class, since it carries
+  no extra columns beyond the two FKs — kept as a full model (not `Table(...)`) so it participates
+  in `Base.metadata.create_all` uniformly with everything else.
+- **`sync_state`**: one row per `site` (`com`/`cn`), enforced via a unique index on `site` rather
+  than a fixed single-row table — simpler than a singleton pattern and matches the `--site`
+  option's per-site resumability requirement.
+- **Engine construction**: `sqlalchemy.URL.create("sqlite", database=str(path))` instead of
+  hand-building a `sqlite:///` string — avoids Windows path-escaping edge cases (backslashes,
+  spaces in usernames, which this dev machine has).
+- **Session pattern**: a `session_scope` context manager (commit on success, rollback on
+  exception, always close) is the only way `sync.py`/`watch.py` will touch the DB — keeps
+  transaction boundaries explicit and matches "resumable" requirement (partial progress commits
+  per page, not per full import).
 
 ## Phase 2 — Auth + client
 
