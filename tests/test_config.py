@@ -25,7 +25,7 @@ def test_resolved_db_path_falls_back_to_data_dir(tmp_path: Path) -> None:
 
 
 def test_run_config_shows_resolved_default_for_db_path() -> None:
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     run_config(console, key="db_path", value=None)
     output = console.export_text()
     assert "leetvault.db" in output
@@ -35,7 +35,7 @@ def test_run_config_shows_resolved_default_for_db_path() -> None:
 def test_run_config_shows_explicit_value_without_default_marker() -> None:
     store = ConfigStore()
     store.set("db_path", "/custom/path/leetvault.db")
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     run_config(console, key="db_path", value=None)
     output = console.export_text()
     assert "/custom/path/leetvault.db" in output
@@ -43,7 +43,7 @@ def test_run_config_shows_explicit_value_without_default_marker() -> None:
 
 
 def test_run_config_list_all_shows_resolved_defaults() -> None:
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     run_config(console, key=None, value=None)
     output = console.export_text()
     assert "db_path" in output

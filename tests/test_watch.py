@@ -20,7 +20,7 @@ def _make_token(exp_in_seconds: int) -> str:
 
 
 def test_run_watch_requires_login() -> None:
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     with pytest.raises(typer.Exit):
         watch.run_watch(console, interval=90, site="com")
 
@@ -30,7 +30,7 @@ def test_run_watch_warns_below_recommended_interval(monkeypatch: pytest.MonkeyPa
     calls: list[int] = []
     monkeypatch.setattr(watch, "run_sync", lambda console, site, keep_all: calls.append(1))
 
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     watch.run_watch(console, interval=10, site="com", sleep_fn=lambda s: None, max_iterations=1)
     assert "below the recommended 60-120s" in console.export_text()
     assert calls == [1]
@@ -42,7 +42,7 @@ def test_run_watch_runs_sync_each_iteration_until_max(monkeypatch: pytest.Monkey
     monkeypatch.setattr(watch, "run_sync", lambda console, site, keep_all: calls.append(1))
 
     sleeps: list[float] = []
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     watch.run_watch(
         console,
         interval=5,
@@ -66,7 +66,7 @@ def test_run_watch_continues_after_a_failed_cycle(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(watch, "run_sync", fake_run_sync)
 
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     watch.run_watch(console, interval=60, site="com", sleep_fn=lambda s: None, max_iterations=2)
     assert len(calls) == 2
     assert "will retry next interval" in console.export_text()
@@ -83,25 +83,25 @@ def test_run_watch_continues_after_unexpected_exception(monkeypatch: pytest.Monk
 
     monkeypatch.setattr(watch, "run_sync", fake_run_sync)
 
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     watch.run_watch(console, interval=60, site="com", sleep_fn=lambda s: None, max_iterations=2)
     assert len(calls) == 2
     assert "unexpected error this cycle" in console.export_text()
 
 
 def test_warn_if_session_expiring_close_to_expiry() -> None:
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     watch._warn_if_session_expiring(console, _make_token(3600))  # 1h left
     assert "expires soon" in console.export_text()
 
 
 def test_warn_if_session_expiring_far_from_expiry() -> None:
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     watch._warn_if_session_expiring(console, _make_token(30 * 24 * 3600))  # 30d left
     assert console.export_text() == ""
 
 
 def test_warn_if_session_expiring_already_expired() -> None:
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     watch._warn_if_session_expiring(console, _make_token(-3600))  # expired 1h ago
     assert "expired at" in console.export_text()

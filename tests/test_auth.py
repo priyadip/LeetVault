@@ -83,7 +83,7 @@ def test_run_login_stores_credentials_on_valid_session(monkeypatch: pytest.Monke
                 200, json={"data": {"userStatus": {"username": "tester", "isSignedIn": True}}}
             )
         )
-        auth.run_login(Console(record=True))
+        auth.run_login(Console(record=True, width=200))
 
     creds = auth.load_leetcode_credentials("com")
     assert creds is not None
@@ -104,7 +104,7 @@ def test_run_login_rejects_signed_out_session(monkeypatch: pytest.MonkeyPatch) -
             )
         )
         try:
-            auth.run_login(Console(record=True))
+            auth.run_login(Console(record=True, width=200))
             raised = False
         except typer.Exit:
             raised = True
@@ -124,7 +124,7 @@ def test_run_login_declines_github_pat_by_default(monkeypatch: pytest.MonkeyPatc
                 200, json={"data": {"userStatus": {"username": "tester", "isSignedIn": True}}}
             )
         )
-        auth.run_login(Console(record=True))
+        auth.run_login(Console(record=True, width=200))
 
     assert auth.load_github_pat() is None
 
@@ -143,7 +143,7 @@ def test_run_login_stores_github_pat_when_confirmed(monkeypatch: pytest.MonkeyPa
         respx.get("https://api.github.com/user").mock(
             return_value=Response(200, json={"login": "octocat"})
         )
-        auth.run_login(Console(record=True))
+        auth.run_login(Console(record=True, width=200))
 
     assert auth.load_github_pat() == "ghp_mytoken"
 
@@ -160,13 +160,13 @@ def test_run_login_does_not_store_invalid_github_pat(monkeypatch: pytest.MonkeyP
             )
         )
         respx.get("https://api.github.com/user").mock(return_value=Response(401, json={}))
-        auth.run_login(Console(record=True))
+        auth.run_login(Console(record=True, width=200))
 
     assert auth.load_github_pat() is None
 
 
 def test_run_status_reports_not_logged_in() -> None:
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     auth.run_status(console)
     assert "Not logged in" in console.export_text()
 
@@ -174,13 +174,13 @@ def test_run_status_reports_not_logged_in() -> None:
 def test_run_status_reports_valid_session() -> None:
     exp = int(time.time()) + 3600
     auth.store_leetcode_credentials("com", _make_token(exp), "csrf")
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     auth.run_status(console)
     assert "Session valid" in console.export_text()
 
 
 def test_run_logout_clears_credentials() -> None:
     auth.store_leetcode_credentials("com", "s", "c")
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     auth.run_logout(console)
     assert auth.load_leetcode_credentials("com") is None

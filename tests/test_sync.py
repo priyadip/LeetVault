@@ -106,13 +106,13 @@ def _db_paths(tmp_path: Path) -> tuple[Path, Path]:
 
 def test_run_import_requires_login() -> None:
     auth.clear_leetcode_credentials("com")
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     with pytest.raises(typer.Exit):
         sync.run_import(console, site="com", keep_all=False)
 
 
 def test_run_sync_requires_prior_import() -> None:
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     with pytest.raises(typer.Exit):
         sync.run_sync(console, site="com", keep_all=False)
 
@@ -139,7 +139,7 @@ def test_run_import_dedups_same_day_and_writes_files(tmp_path: Path) -> None:
     )
     respx.post("https://leetcode.com/graphql").mock(side_effect=_graphql_callback)
 
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     sync.run_import(console, site="com", keep_all=False)
 
     db_path, repo_path = _db_paths(tmp_path)
@@ -183,12 +183,12 @@ def test_run_import_second_call_is_noop(tmp_path: Path) -> None:
     )
     respx.post("https://leetcode.com/graphql").mock(side_effect=_graphql_callback)
 
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     sync.run_import(console, site="com", keep_all=False)
 
     # No routes registered this time: any stray HTTP call would raise inside respx.mock.
     with respx.mock:
-        console2 = Console(record=True)
+        console2 = Console(record=True, width=200)
         sync.run_import(console2, site="com", keep_all=False)
     assert "already completed" in console2.export_text()
 
@@ -213,7 +213,7 @@ def test_run_import_keep_all_disables_dedup(tmp_path: Path) -> None:
     )
     respx.post("https://leetcode.com/graphql").mock(side_effect=_graphql_callback)
 
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     sync.run_import(console, site="com", keep_all=True)
 
     db_path, repo_path = _db_paths(tmp_path)
@@ -251,7 +251,7 @@ def test_run_sync_only_processes_new_submissions(tmp_path: Path) -> None:
     )
     respx.post("https://leetcode.com/graphql").mock(side_effect=_graphql_callback)
 
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     sync.run_import(console, site="com", keep_all=False)
 
     submissions_route.mock(
@@ -268,7 +268,7 @@ def test_run_sync_only_processes_new_submissions(tmp_path: Path) -> None:
         )
     )
 
-    console2 = Console(record=True)
+    console2 = Console(record=True, width=200)
     sync.run_sync(console2, site="com", keep_all=False)
 
     db_path, repo_path = _db_paths(tmp_path)
@@ -329,7 +329,7 @@ def test_run_import_backfills_sync_state_when_resumed_page_is_empty(tmp_path: Pa
         state.last_offset = 25  # simulates a prior run having already paged past all data
         session.add(state)
 
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     sync.run_import(console, site="com", keep_all=False)
 
     with session_scope(factory) as session:
@@ -340,7 +340,7 @@ def test_run_import_backfills_sync_state_when_resumed_page_is_empty(tmp_path: Pa
 
 
 def test_run_import_skips_github_when_unconfigured() -> None:
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     with respx.mock:
         respx.get("https://leetcode.com/api/problems/all/").mock(
             return_value=Response(200, json=_CATALOG_PAYLOAD)
@@ -385,7 +385,7 @@ def test_run_import_commits_and_pushes_when_github_configured(
         lambda repo, repo_url, pat, branch="main": pushed.append((repo_url, pat)),
     )
 
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     sync.run_import(console, site="com", keep_all=False)
 
     assert pushed == [("https://github.com/owner/repo.git", "ghp_faketoken")]

@@ -135,7 +135,7 @@ def test_sync_to_github_noop_when_nothing_changed(tmp_path: Path) -> None:
     from rich.console import Console
 
     ensure_repo(tmp_path)  # pre-existing empty repo, nothing to stage
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     sync_to_github(console, tmp_path, "https://github.com/owner/repo.git", "pat", "msg")
     assert "Nothing new to commit" in console.export_text()
 
@@ -152,7 +152,7 @@ def test_sync_to_github_commits_and_pushes(tmp_path: Path, monkeypatch: pytest.M
     (tmp_path / "Problems").mkdir()
     (tmp_path / "Problems" / "note.txt").write_text("x", encoding="utf-8")
 
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     sync_to_github(console, tmp_path, "https://github.com/owner/repo.git", "pat-value", "msg")
     assert pushed == [("https://github.com/owner/repo.git", "pat-value")]
     assert "Committed and pushed" in console.export_text()
@@ -176,7 +176,7 @@ def test_sync_to_github_still_pushes_unpushed_commit_when_nothing_new_to_commit(
         lambda repo, repo_url, pat, branch="main": pushed.append((repo_url, pat)),
     )
 
-    console = Console(record=True)
+    console = Console(record=True, width=200)
     sync_to_github(console, tmp_path, "https://github.com/owner/repo.git", "pat-value", "msg")
     assert pushed == [("https://github.com/owner/repo.git", "pat-value")]
     output = console.export_text()
