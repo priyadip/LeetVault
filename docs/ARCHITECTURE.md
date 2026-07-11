@@ -41,12 +41,22 @@ literal source of truth once Phase 1 lands.
 
 ## Divergences from CLAUDE.md
 
-None confirmed yet. **Open item**: the exact field shapes for the `userStatus`,
-`submissionDetails`, and `recentAcSubmissionList` GraphQL queries in `client.py` are
-reconstructed from well-known reverse-engineered LeetCode schemas (CLAUDE.md names the query
-surface but not every field). They have not been exercised against the live API yet — `login`'s
-`validate_session()` call is the first live check, gated on the user supplying real
-`LEETCODE_SESSION`/`csrftoken` cookies. Any mismatch found there (or later, when
-`submissionDetails`/`recentAcSubmissionList` are first driven for real in Phase 3) will be fixed
-in `client.py` and logged here with the actual shape observed. REST `/api/submissions/` parsing
-is taken verbatim from CLAUDE.md's explicit field list and is not in question.
+Live-verified against the real account (`priyadipsau`) during Phase 2:
+
+- **`LEETCODE_SESSION` has no `exp` claim.** CLAUDE.md says "Decode the JWT `exp`"; the real
+  payload instead carries `refreshed_at` (unix seconds) and `_session_expiry` (a relative TTL in
+  seconds — observed as `1209600` = 14 days). `auth.decode_session_expiry` computes
+  `refreshed_at + _session_expiry`, falling back to a literal `exp` claim if one is ever present.
+- **`submissionDetails.runtime`/`.memory` are unformatted numbers, not display strings.**
+  REST `/api/submissions/` gives pre-formatted strings (`"2956 ms"`, `"711.2 MB"`); GraphQL
+  `submissionDetails` gives raw numbers (`runtime: 2956` = milliseconds, `memory: 711172000` =
+  bytes). `SubmissionDetail.runtime`/`.memory` are typed `int | None` accordingly. This doesn't
+  affect the DB schema — `submissions.runtime`/`.memory` are sourced from REST's formatted
+  strings per CLAUDE.md, and `submissionDetails` is only consulted for the percentile fields
+  (`runtimePercentile`/`memoryPercentile`, both floats, confirmed) plus `code`/`lang.name` as a
+  fallback when REST's `code` is absent.
+- **Everything else matches assumptions**: `userStatus.{username,isSignedIn}`,
+  `recentAcSubmissionList` items (`id`, `title`, `titleSlug`, `timestamp`), and every REST
+  `submissions_dump` field (`id`, `question_id`, `title`, `title_slug`, `status_display`, `lang`,
+  `runtime`, `memory`, `timestamp`, `url`, `code`, top-level `has_next`/`last_key`) came back
+  exactly as coded in `client.py` on the first live call — no further changes needed there.

@@ -69,10 +69,17 @@ def decode_session_expiry(leetcode_session: str) -> datetime | None:
         payload = jwt.decode(leetcode_session, options={"verify_signature": False})
     except jwt.PyJWTError:
         return None
+    # Real LEETCODE_SESSION tokens carry no standard "exp" claim - they carry
+    # "refreshed_at" (unix seconds) + "_session_expiry" (a relative TTL in seconds,
+    # observed as 1209600 = 14 days). Fall back to "exp" too in case that ever changes.
     exp = payload.get("exp")
-    if exp is None:
-        return None
-    return datetime.fromtimestamp(exp, tz=UTC)
+    if exp is not None:
+        return datetime.fromtimestamp(exp, tz=UTC)
+    refreshed_at = payload.get("refreshed_at")
+    session_expiry = payload.get("_session_expiry")
+    if refreshed_at is not None and session_expiry is not None:
+        return datetime.fromtimestamp(refreshed_at + session_expiry, tz=UTC)
+    return None
 
 
 def run_login(console: Console) -> None:

@@ -58,6 +58,21 @@ def test_decode_session_expiry_invalid_token_returns_none() -> None:
     assert auth.decode_session_expiry("not-a-jwt") is None
 
 
+def test_decode_session_expiry_real_leetcode_shape() -> None:
+    # Real LEETCODE_SESSION tokens carry no "exp" claim - only "refreshed_at" (unix
+    # seconds) + "_session_expiry" (relative TTL seconds), confirmed against a live login.
+    refreshed_at = int(time.time())
+    session_expiry = 1_209_600  # 14 days, as observed live
+    token = jwt.encode(
+        {"refreshed_at": refreshed_at, "_session_expiry": session_expiry},
+        key="x" * 32,
+        algorithm="HS256",
+    )
+    decoded = auth.decode_session_expiry(token)
+    assert decoded is not None
+    assert int(decoded.timestamp()) == refreshed_at + session_expiry
+
+
 def test_run_login_stores_credentials_on_valid_session(monkeypatch: pytest.MonkeyPatch) -> None:
     prompts = iter(["fake.jwt.token", "csrf-value"])
     monkeypatch.setattr(auth.typer, "prompt", lambda *a, **k: next(prompts))  # type: ignore[attr-defined]

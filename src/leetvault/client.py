@@ -75,9 +75,11 @@ class UserStatus:
 
 @dataclass
 class SubmissionDetail:
-    runtime: str | None
+    # Unlike REST's pre-formatted "52 ms" / "16.1 MB" strings, GraphQL returns these
+    # unformatted: runtime in milliseconds, memory in bytes (confirmed live).
+    runtime: int | None
     runtime_percentile: float | None
-    memory: str | None
+    memory: int | None
     memory_percentile: float | None
     code: str | None
     lang: str | None

@@ -87,9 +87,9 @@ def test_submission_details_parses_shape() -> None:
             json={
                 "data": {
                     "submissionDetails": {
-                        "runtime": "52 ms",
+                        "runtime": 52,
                         "runtimePercentile": 88.5,
-                        "memory": "16.1 MB",
+                        "memory": 16_900_000,
                         "memoryPercentile": 42.1,
                         "code": "class Solution: pass",
                         "lang": {"name": "python3"},
