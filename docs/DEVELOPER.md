@@ -40,8 +40,7 @@ ruff format --check .      # formatting
 mypy --strict               # type check (src/leetvault only, see pyproject.toml)
 ```
 
-All four must be clean before a commit lands, per the project's working protocol in
-`CLAUDE.md`.
+All four must be clean before a commit lands.
 
 ## Test isolation
 
@@ -58,10 +57,10 @@ the test suite (see "Live smoke testing" below).
 ## Live smoke testing
 
 Most of this project's genuinely tricky bugs were only found by actually running the tool
-against a real LeetCode account and a real GitHub repo (see `PLAN.md` for the specifics - a
-Windows console Unicode crash, a `sync_state` finalization gap, and a stranded-commit bug all
-surfaced this way, none of them via the mocked test suite alone). If you're changing
-`client.py`, `sync.py`, or `git_writer.py`, consider:
+against a real LeetCode account and a real GitHub repo (see `docs/ARCHITECTURE.md` for the
+specifics - a Windows console Unicode crash, a `sync_state` finalization gap, and a
+stranded-commit bug all surfaced this way, none of them via the mocked test suite alone). If
+you're changing `client.py`, `sync.py`, or `git_writer.py`, consider:
 
 ```bash
 leetvault login     # stores real credentials in your OS keyring
@@ -78,6 +77,6 @@ leetvault sync       # exercises the git commit/push path for real
    `tests/test_models.py`.
 3. Verify the exact field shape live (see above) before locking it in - LeetCode's API is
    entirely reverse-engineered; nothing here is officially documented, and past assumptions
-   have been wrong in specific, non-obvious ways (see `docs/ARCHITECTURE.md`'s "Divergences
-   from CLAUDE.md" section).
+   have been wrong in specific, non-obvious ways (see `docs/ARCHITECTURE.md`'s notes on
+   building against the live API).
 4. Record what you found - live-verified vs. assumed - in `docs/ARCHITECTURE.md`.

@@ -74,7 +74,6 @@ newest is kept); pass `--keep-all` to `import`/`sync` to disable that.
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [CHANGELOG.md](CHANGELOG.md)
-- [PLAN.md](PLAN.md) — the running decision log from this project's initial build.
 
 ## License
 

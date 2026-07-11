@@ -36,48 +36,56 @@ easy to localize.
 
 ## Data model
 
-See CLAUDE.md's "Data model (SQLite)" section for the authoritative schema; `models.py` is the
-literal source of truth once Phase 1 lands.
+`models.py` is the literal source of truth for the schema:
 
-## Divergences from CLAUDE.md
+- `problems` (`question_id` PK, `frontend_id`, `title`, `title_slug`, `difficulty`, `paid_only`,
+  `url`)
+- `submissions` (`submission_id` PK, `question_id` FK, `lang`, `status`, `runtime`, `memory`,
+  `runtime_percentile`, `memory_percentile`, `timestamp`, `code_hash`, `is_accepted`)
+- `submission_code` (`submission_id` PK/FK, `code`)
+- `topics` + `problem_topics` (M2M)
+- `sync_state` (`id`, `site`, `last_offset`, `last_submission_id`, `last_synced_timestamp`,
+  `last_full_import_completed_at`)
 
-Live-verified against the real account (`priyadipsau`) during Phase 2:
+## Notes from building against the live, undocumented LeetCode API
 
-- **`LEETCODE_SESSION` has no `exp` claim.** CLAUDE.md says "Decode the JWT `exp`"; the real
-  payload instead carries `refreshed_at` (unix seconds) and `_session_expiry` (a relative TTL in
-  seconds — observed as `1209600` = 14 days). `auth.decode_session_expiry` computes
-  `refreshed_at + _session_expiry`, falling back to a literal `exp` claim if one is ever present.
-- **`submissionDetails.runtime`/`.memory` are unformatted numbers, not display strings.**
-  REST `/api/submissions/` gives pre-formatted strings (`"2956 ms"`, `"711.2 MB"`); GraphQL
-  `submissionDetails` gives raw numbers (`runtime: 2956` = milliseconds, `memory: 711172000` =
-  bytes). `SubmissionDetail.runtime`/`.memory` are typed `int | None` accordingly. This doesn't
-  affect the DB schema — `submissions.runtime`/`.memory` are sourced from REST's formatted
-  strings per CLAUDE.md, and `submissionDetails` is only consulted for the percentile fields
-  (`runtimePercentile`/`memoryPercentile`, both floats, confirmed) plus `code`/`lang.name` as a
+LeetCode has no official API, so every field shape below was confirmed by actually calling the
+endpoint against a real account rather than assumed:
+
+- **`LEETCODE_SESSION`'s JWT has no `exp` claim.** It instead carries `refreshed_at` (unix
+  seconds) and `_session_expiry` (a relative TTL in seconds — observed as `1209600` = 14 days).
+  `auth.decode_session_expiry` computes `refreshed_at + _session_expiry`, falling back to a
+  literal `exp` claim if one is ever present.
+- **`submissionDetails.runtime`/`.memory` (GraphQL) are unformatted numbers, not display
+  strings.** REST `/api/submissions/` gives pre-formatted strings (`"2956 ms"`, `"711.2 MB"`);
+  GraphQL `submissionDetails` gives raw numbers (`runtime: 2956` = milliseconds,
+  `memory: 711172000` = bytes). `SubmissionDetail.runtime`/`.memory` are typed `int | None`
+  accordingly. This doesn't affect the DB schema — `submissions.runtime`/`.memory` are sourced
+  from REST's formatted strings, and `submissionDetails` is only consulted for the percentile
+  fields (`runtimePercentile`/`memoryPercentile`, both floats) plus `code`/`lang.name` as a
   fallback when REST's `code` is absent.
-- **Everything else matches assumptions**: `userStatus.{username,isSignedIn}`,
-  `recentAcSubmissionList` items (`id`, `title`, `titleSlug`, `timestamp`), and every REST
-  `submissions_dump` field (`id`, `question_id`, `title`, `title_slug`, `status_display`, `lang`,
-  `runtime`, `memory`, `timestamp`, `url`, `code`, top-level `has_next`/`last_key`) came back
-  exactly as coded in `client.py` on the first live call — no further changes needed there.
-- **`/api/problems/all/` (not named in CLAUDE.md) supplies the fields REST's submissions dump
-  lacks.** `stat_status_pairs[].{stat.question_id, stat.frontend_question_id,
-  stat.question__title, stat.question__title_slug, difficulty.level, paid_only}` — confirmed
-  live, ~4000 problems in one response. `client.get_all_problems()` maps `difficulty.level`
-  1/2/3 to `Easy`/`Medium`/`Hard`.
-- **A live `import` + `sync` smoke run against the real account surfaced two real bugs** (both
-  fixed, both regression-tested where the fix is unit-testable — see PLAN.md Phase 3 for
-  detail): (1) `rich`'s progress bar crashed on this Windows console's cp1252 codepage via
-  rich's legacy Win32 console render path; (2) `run_import` could finalize `sync_state` with a
+- **Everything else in the REST/GraphQL surface matched on the first live call**:
+  `userStatus.{username,isSignedIn}`, `recentAcSubmissionList` items (`id`, `title`,
+  `titleSlug`, `timestamp`), and every REST `submissions_dump` field (`id`, `question_id`,
+  `title`, `title_slug`, `status_display`, `lang`, `runtime`, `memory`, `timestamp`, `url`,
+  `code`, top-level `has_next`/`last_key`).
+- **`/api/problems/all/` supplies the fields REST's submissions dump lacks**
+  (`difficulty`/`paid_only`/`frontend_id`). `stat_status_pairs[].{stat.question_id,
+  stat.frontend_question_id, stat.question__title, stat.question__title_slug, difficulty.level,
+  paid_only}` — confirmed live, ~4000 problems in one response. `client.get_all_problems()` maps
+  `difficulty.level` 1/2/3 to `Easy`/`Medium`/`Hard`.
+- **Topic tags come from `GraphQL question(titleSlug) { topicTags { name } }`** — not part of
+  either endpoint above. Wired into `sync.py` as a once-per-newly-seen-problem enrichment call,
+  same failure-tolerance pattern as `submissionDetails`.
+- **A live `import` + `sync` smoke run against a real account surfaced two real bugs**, neither
+  caught by the mocked test suite alone: (1) `rich`'s progress bar crashed on a Windows
+  console's cp1252 codepage via rich's legacy Win32 console render path (fixed by forcing UTF-8
+  + `legacy_windows=False` in `cli.py`); (2) `run_import` could finalize `sync_state` with a
   completed-import flag but a null `last_submission_id` if the run resumed onto an
-  already-fully-paged (empty) page, permanently breaking `sync`. Neither was caught by the
-  mocked test suite alone — both only surfaced by actually running the tool.
-- **Topic tags require a query CLAUDE.md never named**: `GraphQL question(titleSlug) {
-  topicTags { name } }` — live-verified, works, returns `[{name, slug}]` (slug unused). Wired
-  into `sync.py` as a once-per-newly-seen-problem enrichment call, same failure-tolerance
-  pattern as `submissionDetails`.
-- **A live GitHub push surfaced a real bug in the git layer** (see PLAN.md Phase 4): an initial
-  push failed with a genuine 403 (PAT permissions, user-side, not a code issue — confirmed our
-  error handling was correct: clean scrubbed message, no leak), but the commit it made *before*
-  failing was left stranded, since the old `sync_to_github` only pushed inside the
+  already-fully-paged (empty) page, permanently breaking `sync` (fixed by falling back to the
+  DB's true newest submission when the run itself saw none).
+- **A live GitHub push surfaced a real bug in the git layer**: an initial push attempt failed
+  with a genuine 403 (a PAT permissions issue, not a code issue — confirmed the error handling
+  itself was correct: a clean scrubbed message, no PAT leaked), but the commit it made *before*
+  failing was left stranded, since `sync_to_github` originally only pushed inside the
   "just committed" branch. Fixed to always attempt a push whenever any local commit exists.
