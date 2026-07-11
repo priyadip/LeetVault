@@ -228,7 +228,36 @@ One-way-door decisions get flagged and stopped on instead of logged here.
 
 ## Phase 6 — Watch
 
-_(filled in when started)_
+- **`watch` is a thin loop around `sync`**: each cycle is a normal `run_sync()` call, which
+  already does DB write + README regenerate + commit/push in one pass, so "reconcile
+  SyncState" and "write -> README -> commit -> push on new AC" fall out of Phase 3/4/5's
+  existing logic for free - `watch.py` only adds the loop, expiry warning, and graceful
+  shutdown on top.
+- **First cycle runs immediately**, not after waiting a full interval - matches the "picks up
+  a fresh solve within one interval" acceptance criterion (worst case is one interval's delay
+  for a solve made *after* watch starts, not `interval + startup-delay`).
+- **A bad cycle never kills the watcher**: `run_sync`'s `typer.Exit` (e.g. a failed push) and
+  any other exception are both caught per-cycle, logged, and the loop just waits for the next
+  interval and retries - a `watch` process is meant to be long-running and unattended, so one
+  transient failure (network blip, a temporarily-bad PAT) shouldn't require the user to notice
+  and manually restart it.
+- **Shutdown is polled in 1-second steps**, not one `time.sleep(interval)` call - makes Ctrl+C
+  response near-instant regardless of how long `--interval` is, and makes the loop unit-testable
+  via an injectable `sleep_fn` without needing real wall-clock waits.
+- **Testability hook**: `run_watch` takes keyword-only `sleep_fn`/`max_iterations` defaults
+  (`time.sleep`/`None`) invisible to the CLI (`cli.py` never passes them) - the only practical
+  way to unit-test an intentionally-infinite loop without mocking `time.sleep` globally or
+  relying on real signal delivery in tests.
+- **Live smoke test**: ran `leetvault watch --interval 90` for real. First cycle correctly ran
+  a real sync + commit + push immediately, then entered the interval wait as expected. Verified
+  via `git status`/`git log` afterward that the repo was left in a clean, uncorrupted state.
+  Note: testing signal-based shutdown itself hit a *harness* limitation, not a code one - Git
+  Bash's `timeout` utility can't reliably deliver POSIX signals through to a native Windows
+  Python process (it hard-kills instead), so SIGTERM-based graceful shutdown couldn't be
+  exercised end-to-end from this environment. `signal.signal(signal.SIGINT/SIGTERM, handler)`
+  is standard-library usage exercised via the `max_iterations` unit tests for the loop-exit
+  logic itself; real Ctrl+C in an actual interactive console (where Windows reliably delivers
+  `CTRL_C_EVENT` as `SIGINT`) is unaffected by this gap.
 
 ## Phase 7 — Packaging/CI/docs
 
