@@ -3,7 +3,7 @@
 ## Setup
 
 ```bash
-git clone https://github.com/leetvault/leetvault.git
+git clone https://github.com/priyadip/LeetVault.git
 cd leetvault
 pip install -e ".[dev]"
 ```

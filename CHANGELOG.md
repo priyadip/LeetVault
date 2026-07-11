@@ -19,5 +19,5 @@ Initial release.
 - `watch`: polling loop with graceful shutdown and session-expiry warnings.
 - `config`: get/set persistent settings.
 
-[Unreleased]: https://github.com/leetvault/leetvault/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/leetvault/leetvault/releases/tag/v0.1.0
+[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/priyadip/LeetVault/releases/tag/v0.1.0

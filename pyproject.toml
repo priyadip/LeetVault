@@ -37,10 +37,10 @@ dependencies = [
 leetvault = "leetvault.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/leetvault/leetvault"
-Repository = "https://github.com/leetvault/leetvault"
-Issues = "https://github.com/leetvault/leetvault/issues"
-Changelog = "https://github.com/leetvault/leetvault/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/priyadip/LeetVault"
+Repository = "https://github.com/priyadip/LeetVault"
+Issues = "https://github.com/priyadip/LeetVault/issues"
+Changelog = "https://github.com/priyadip/LeetVault/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [

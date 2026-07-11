@@ -285,17 +285,23 @@ One-way-door decisions get flagged and stopped on instead of logged here.
   `test.pypi.org/legacy/`), `publish-pypi` (`needs: publish-testpypi`, OIDC `id-token: write`,
   targets real PyPI). Real PyPI publish is structurally impossible unless the TestPyPI dry-run
   job succeeds first, since it's a hard `needs:` dependency, not just an ordering hint.
-- **Known gap, stated honestly rather than glossed over**: this local repo has no GitHub
-  remote configured (that's expected - the two Phase 4 checkpoint credentials were for the
-  user's separate LeetCode *solutions* mirror repo, `priyadip/DSA-LeetCode-`, not for
-  leetvault's own source). That means CI has **not** actually been exercised on GitHub's
-  runners, and the TestPyPI dry-run has **not** actually been executed - both require: (1)
-  pushing this source repo to a real GitHub remote, and (2) the user configuring PyPI/TestPyPI
-  Trusted Publisher settings (project name `leetvault`, this repo, workflow filename
-  `publish.yml`) on pypi.org/test.pypi.org themselves, which is an account-level action only
-  the user can do. What *was* verified locally, standing in for CI as closely as this
-  environment allows: `pytest`/`ruff check`/`ruff format --check`/`mypy --strict` all clean on
-  this machine (Python 3.12, Windows); a real wheel build + throwaway-venv install; and YAML
-  syntax validation of both workflow files. The placeholder `github.com/leetvault/leetvault`
-  URLs in `pyproject.toml`/`README.md` should be updated to wherever this source actually ends
-  up hosted before a real release.
+- **GitHub remote closed out (post-Phase-7)**: pushed this source repo to
+  `github.com/priyadip/LeetVault` (a fine-grained PAT with Contents + **Workflows: write** was
+  needed specifically because the initial push includes files under `.github/workflows/` -
+  plain Contents write alone is rejected by GitHub for that path). Updated every placeholder
+  `github.com/leetvault/leetvault` URL (pyproject.toml, the README template's attribution line,
+  CHANGELOG.md, docs/DEVELOPER.md) to the real repo. First CI run failed on every
+  `ubuntu-latest` job only (`test (windows-latest, *)` and `test (macos-latest, *)` all green);
+  root cause: `Console(record=True)` defaults to an 80-column width when not attached to a real
+  terminal, and Ubuntu's longer `pytest-of-runner/...` tmp-dir paths pushed
+  `tests/test_config.py`'s resolved-`db_path` assertions past the wrap point
+  (`le\netvault.db`), while Windows/macOS runners' shorter equivalent paths happened not to
+  reach it. Fixed by setting `width=200` on every `Console(record=True)` in the test suite (not
+  just the two that failed - the same wrap risk exists anywhere a long enough string is
+  asserted on), re-pushed, confirmed green on all 9 OS/Python combinations + lint. **CI is now
+  genuinely exercised on GitHub, not just locally.**
+- **TestPyPI/PyPI dry-run remains not yet executed** - this needs the user to (1) create PyPI
+  and TestPyPI accounts, (2) register a pending Trusted Publisher for project name `leetvault`
+  on both, pointing at `priyadip/LeetVault` + workflow `publish.yml` + environment names
+  `testpypi`/`pypi`, then (3) push a version tag. All account-level actions only the user can
+  do; nothing further to build on leetvault's side for this.
