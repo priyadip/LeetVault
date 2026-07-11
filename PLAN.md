@@ -300,8 +300,23 @@ One-way-door decisions get flagged and stopped on instead of logged here.
   just the two that failed - the same wrap risk exists anywhere a long enough string is
   asserted on), re-pushed, confirmed green on all 9 OS/Python combinations + lint. **CI is now
   genuinely exercised on GitHub, not just locally.**
-- **TestPyPI/PyPI dry-run remains not yet executed** - this needs the user to (1) create PyPI
-  and TestPyPI accounts, (2) register a pending Trusted Publisher for project name `leetvault`
-  on both, pointing at `priyadip/LeetVault` + workflow `publish.yml` + environment names
-  `testpypi`/`pypi`, then (3) push a version tag. All account-level actions only the user can
-  do; nothing further to build on leetvault's side for this.
+- **Stray `Co-Authored-By: Claude` trailer found and removed from history**: GitHub's
+  contributor graph specifically recognizes `Co-Authored-By: <name> <noreply@anthropic.com>`
+  trailers and attributes co-authorship to a "claude" account (its own icon/branding) - the
+  first three commits (Phase 0-2, made before the user's standing instruction to never include
+  that trailer took effect) still had it. Rewrote all 12 commit messages with `git filter-branch
+  --msg-filter` (stripping only lines matching `^Co-Authored-By: Claude`, leaving every other
+  line, author, and file content untouched - diffed the pre/post trees to confirm), then
+  force-pushed (`--force-with-lease` pinned to the known remote SHA, not a bare `--force`).
+  Verified via `GET /repos/priyadip/LeetVault/contributors` before and after: two entries
+  (`priyadip`, `claude`) -> one (`priyadip`, same contribution count). CI re-verified green
+  post-rewrite.
+- **TestPyPI/PyPI publish - done for real.** User registered pending Trusted Publishers on both
+  pypi.org and test.pypi.org (project `leetvault`, repo `priyadip/LeetVault`, workflow
+  `publish.yml`, environment names `testpypi`/`pypi`). Pushed tag `v0.1.0`; the `Publish`
+  workflow ran `build` -> `publish-testpypi` -> `publish-pypi` in sequence, all three green, no
+  stored PyPI token anywhere (pure OIDC Trusted Publishing). Verified independently of the
+  workflow's own success by querying `pypi.org/pypi/leetvault/json` and
+  `test.pypi.org/pypi/leetvault/json` directly (both report `0.1.0`) and by installing
+  `leetvault` from real PyPI into a throwaway venv and running `leetvault --help` from it.
+  **`pip install leetvault` works for anyone, right now.**
