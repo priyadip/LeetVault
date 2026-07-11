@@ -283,6 +283,68 @@ def test_run_sync_only_processes_new_submissions(tmp_path: Path) -> None:
 
 
 @respx.mock
+def test_run_sync_updates_latest_when_problem_resolved_again_later(tmp_path: Path) -> None:
+    # Regression test for a real bug: a first `import`/`sync` stores an accepted submission
+    # for a problem; solving that same problem again later (even the same day, well within
+    # the dedup window) must still update latest.py to the newer code, and must not be
+    # silently dropped forever. The original dedup comparison used a raw subtraction that
+    # went negative for this exact case (new timestamp > previously-kept timestamp),
+    # and a negative number is always < the window, so it discarded every subsequent
+    # solve to an already-known problem permanently.
+    respx.get("https://leetcode.com/api/problems/all/").mock(
+        return_value=Response(200, json=_CATALOG_PAYLOAD)
+    )
+    submissions_route = respx.get("https://leetcode.com/api/submissions/")
+    submissions_route.mock(
+        return_value=Response(
+            200,
+            json={
+                "submissions_dump": [
+                    _submission(100, 1, "two-sum", "Accepted", 1000, code="v1"),
+                ],
+                "has_next": False,
+                "last_key": None,
+            },
+        )
+    )
+    respx.post("https://leetcode.com/graphql").mock(side_effect=_graphql_callback)
+
+    console = Console(record=True, width=200)
+    sync.run_import(console, site="com", keep_all=False)
+
+    # Solve the same problem again a minute later - well within the default 24h window.
+    submissions_route.mock(
+        return_value=Response(
+            200,
+            json={
+                "submissions_dump": [
+                    _submission(300, 1, "two-sum", "Accepted", 1000 + 120, code="v3"),
+                    _submission(200, 1, "two-sum", "Accepted", 1000 + 60, code="v2"),
+                    _submission(100, 1, "two-sum", "Accepted", 1000, code="v1"),
+                ],
+                "has_next": False,
+                "last_key": None,
+            },
+        )
+    )
+
+    console2 = Console(record=True, width=200)
+    sync.run_sync(console2, site="com", keep_all=False)
+
+    db_path, repo_path = _db_paths(tmp_path)
+    engine = make_engine(db_path)
+    factory = make_session_factory(engine)
+    with session_scope(factory) as session:
+        ids = set(session.scalars(select(Submission.submission_id)))
+    # 100 (already in DB from import) and 300 (the newest resolve) are kept; 200, a
+    # redundant in-between attempt within the window of the new latest, is dropped.
+    assert ids == {100, 300}
+
+    latest = repo_path / "Problems" / "two-sum" / "latest.py"
+    assert latest.read_text(encoding="utf-8") == "v3"
+
+
+@respx.mock
 def test_run_import_backfills_sync_state_when_resumed_page_is_empty(tmp_path: Path) -> None:
     # Regression test: a run_import that resumes past the last real page (e.g. a prior run
     # committed data per-page but crashed before finalizing sync_state - this happened for

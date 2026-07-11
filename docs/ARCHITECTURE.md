@@ -89,3 +89,19 @@ endpoint against a real account rather than assumed:
   itself was correct: a clean scrubbed message, no PAT leaked), but the commit it made *before*
   failing was left stranded, since `sync_to_github` originally only pushed inside the
   "just committed" branch. Fixed to always attempt a push whenever any local commit exists.
+- **Real-world usage surfaced a dedup bug**: resolving an already-synced problem again later
+  (even the same day) was silently dropped forever, and `latest.py` never updated past the
+  first submission `sync` ever saw for that problem. Root cause: the dedup window check
+  compared `known_latest_timestamp - sub.timestamp < dedup_window_seconds` — correct only
+  when processing strictly newest-first *within a single run*, where the previously-kept
+  timestamp is always >= the one being compared. But `known_latest_timestamp` is seeded from
+  the DB at the start of every run, and a genuinely newer submission arriving in a *later* run
+  makes that subtraction go negative — and a negative number is always less than the window,
+  so it always looked deduplicable, forever, regardless of how much time had actually passed.
+  Separately, "should this become `latest.py`" was gated on "have I never seen this
+  question_id in `last_kept` before," which — once seeded from the DB — is permanently false,
+  so `latest.py` could never be updated again even after fixing the timestamp math. Fixed both:
+  dedup now compares `abs(known_latest_timestamp - sub.timestamp)`, and "is this the latest"
+  is now a genuine `sub.timestamp > known_latest_timestamp` comparison that updates as new
+  submissions are processed, so the truly newest solve always wins regardless of which run
+  (import or a later sync) first encounters the problem.

@@ -102,11 +102,20 @@ def _process_submission(
     if session.get(Submission, sub.submission_id) is not None:
         return False
 
-    is_first_for_problem = sub.question_id not in last_kept
-    if not keep_all and not is_first_for_problem:
-        prior_timestamp = last_kept[sub.question_id]
-        if prior_timestamp - sub.timestamp < dedup_window_seconds:
-            return False
+    known_latest_timestamp = last_kept.get(sub.question_id)
+    is_newest_for_problem = known_latest_timestamp is None or sub.timestamp > known_latest_timestamp
+    # Only dedupe a submission that is *older* than the current latest known one for this
+    # problem, and only within the window - a solve from outside the window is a distinct,
+    # later attempt and must never be dropped just because a stale kept timestamp precedes
+    # it (comparing by raw subtraction here previously went negative for exactly that case,
+    # silently discarding every subsequent solve forever).
+    if (
+        not keep_all
+        and known_latest_timestamp is not None
+        and not is_newest_for_problem
+        and abs(known_latest_timestamp - sub.timestamp) < dedup_window_seconds
+    ):
+        return False
 
     meta = catalog.get(sub.question_id)
     if meta is None:
@@ -153,7 +162,7 @@ def _process_submission(
     session.add(submission)
 
     write_history(repo_path, meta.title_slug, sub.submission_id, sub.lang, code)
-    if is_first_for_problem:
+    if is_newest_for_problem:
         write_latest_and_metadata(
             repo_path,
             meta,
@@ -167,8 +176,8 @@ def _process_submission(
             memory_percentile,
         )
         ensure_notes(repo_path, meta)
+        last_kept[sub.question_id] = sub.timestamp
 
-    last_kept[sub.question_id] = sub.timestamp
     return True
 
 
