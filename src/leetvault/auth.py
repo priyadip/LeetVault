@@ -108,6 +108,32 @@ def run_login(console: Console) -> None:
         "Credentials stored in the OS keyring."
     )
 
+    _maybe_store_github_pat(console)
+
+
+def _maybe_store_github_pat(console: Console) -> None:
+    from leetvault.git_writer import validate_github_pat
+
+    try:
+        wants_pat = typer.confirm(
+            "Also store a GitHub PAT now, for automatic commit/push? "
+            "(fine-grained, scoped to one repo, Contents: write)",
+            default=False,
+        )
+    except (typer.Abort, EOFError, OSError):
+        return  # non-interactive context (e.g. tests, piped input) - just skip
+
+    if not wants_pat:
+        return
+
+    pat = typer.prompt("GitHub PAT", hide_input=True)
+    login = validate_github_pat(pat)
+    if login is None:
+        console.print("[red]GitHub PAT validation failed; not stored.[/red]")
+        return
+    store_github_pat(pat)
+    console.print(f"[green]GitHub PAT stored[/green] (validated as {login!r}).")
+
 
 def run_status(console: Console) -> None:
     from leetvault.config import ConfigStore

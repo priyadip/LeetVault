@@ -1,6 +1,6 @@
-"""Disk layout writer for the mirrored `Problems/<slug>/...` tree.
-
-Git commit/push (transient-PAT injection, batching) lands in Phase 4 on top of this.
+"""Disk layout writer for the mirrored `Problems/<slug>/...` tree, plus the git commit/push
+layer on top of it: a transient-PAT push that never persists the token to disk, and batches
+every file written by one sync/import/watch run into a single commit.
 """
 
 from __future__ import annotations
@@ -8,6 +8,11 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
+
+import httpx
+from git import GitCommandError, Repo
+from rich.console import Console
 
 from leetvault.client import ProblemMeta
 
@@ -113,3 +118,78 @@ def ensure_notes(repo_path: Path, problem: ProblemMeta) -> Path:
     if not notes_path.exists():
         notes_path.write_text(f"# {problem.title}\n\n{problem.url}\n", encoding="utf-8")
     return notes_path
+
+
+class GitWriterError(RuntimeError):
+    """Raised on a git or GitHub API failure. Messages are always PAT-scrubbed."""
+
+
+def ensure_repo(repo_path: Path) -> Repo:
+    repo_path.mkdir(parents=True, exist_ok=True)
+    if (repo_path / ".git").exists():
+        return Repo(repo_path)
+    return Repo.init(repo_path, initial_branch="main")
+
+
+def stage_and_commit(repo: Repo, message: str) -> bool:
+    """Stage every change and commit. Returns False (no-op) if nothing changed."""
+    repo.git.add(A=True)
+    if not repo.git.status(porcelain=True).strip():
+        return False
+    repo.index.commit(message)
+    return True
+
+
+def _authenticated_url(repo_url: str, pat: str) -> str:
+    parts = urlsplit(repo_url)
+    netloc = f"x-access-token:{pat}@{parts.hostname}"
+    if parts.port:
+        netloc = f"{netloc}:{parts.port}"
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+
+
+def _scrub(pat: str, text: str) -> str:
+    return text.replace(pat, "***")
+
+
+def push(repo: Repo, repo_url: str, pat: str, branch: str = "main") -> None:
+    """Push HEAD to `branch`, injecting the PAT into the push URL only for this call -
+    never as a named remote, so it never lands in .git/config."""
+    url = _authenticated_url(repo_url, pat)
+    try:
+        repo.git.push(url, f"HEAD:refs/heads/{branch}")
+    except GitCommandError as exc:
+        raise GitWriterError(_scrub(pat, str(exc))) from None
+
+
+def validate_github_pat(pat: str) -> str | None:
+    """Check the PAT is live by hitting GitHub's /user endpoint. Returns the login, or
+    None if the token is invalid/unauthorized."""
+    try:
+        response = httpx.get(
+            "https://api.github.com/user",
+            headers={"Authorization": f"Bearer {pat}", "Accept": "application/vnd.github+json"},
+            timeout=10.0,
+        )
+    except httpx.HTTPError:
+        return None
+    if response.status_code != 200:
+        return None
+    login = response.json().get("login")
+    return str(login) if login else None
+
+
+def sync_to_github(
+    console: Console, repo_path: Path, repo_url: str, pat: str, message: str
+) -> None:
+    """Commit + push everything written by this run. A no-op if nothing changed."""
+    repo = ensure_repo(repo_path)
+    if not stage_and_commit(repo, message):
+        console.print("[green]Nothing new to commit.[/green]")
+        return
+    try:
+        push(repo, repo_url, pat)
+    except GitWriterError as exc:
+        console.print(f"[red]Push failed:[/red] {exc}")
+        raise
+    console.print(f"[green]Committed and pushed[/green]: {message}")

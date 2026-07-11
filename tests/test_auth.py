@@ -113,6 +113,58 @@ def test_run_login_rejects_signed_out_session(monkeypatch: pytest.MonkeyPatch) -
     assert auth.load_leetcode_credentials("com") is None
 
 
+def test_run_login_declines_github_pat_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    prompts = iter(["fake.jwt.token", "csrf-value"])
+    monkeypatch.setattr(auth.typer, "prompt", lambda *a, **k: next(prompts))  # type: ignore[attr-defined]
+    monkeypatch.setattr(auth.typer, "confirm", lambda *a, **k: False)  # type: ignore[attr-defined]
+
+    with respx.mock:
+        respx.post("https://leetcode.com/graphql").mock(
+            return_value=Response(
+                200, json={"data": {"userStatus": {"username": "tester", "isSignedIn": True}}}
+            )
+        )
+        auth.run_login(Console(record=True))
+
+    assert auth.load_github_pat() is None
+
+
+def test_run_login_stores_github_pat_when_confirmed(monkeypatch: pytest.MonkeyPatch) -> None:
+    prompts = iter(["fake.jwt.token", "csrf-value", "ghp_mytoken"])
+    monkeypatch.setattr(auth.typer, "prompt", lambda *a, **k: next(prompts))  # type: ignore[attr-defined]
+    monkeypatch.setattr(auth.typer, "confirm", lambda *a, **k: True)  # type: ignore[attr-defined]
+
+    with respx.mock:
+        respx.post("https://leetcode.com/graphql").mock(
+            return_value=Response(
+                200, json={"data": {"userStatus": {"username": "tester", "isSignedIn": True}}}
+            )
+        )
+        respx.get("https://api.github.com/user").mock(
+            return_value=Response(200, json={"login": "octocat"})
+        )
+        auth.run_login(Console(record=True))
+
+    assert auth.load_github_pat() == "ghp_mytoken"
+
+
+def test_run_login_does_not_store_invalid_github_pat(monkeypatch: pytest.MonkeyPatch) -> None:
+    prompts = iter(["fake.jwt.token", "csrf-value", "bad-token"])
+    monkeypatch.setattr(auth.typer, "prompt", lambda *a, **k: next(prompts))  # type: ignore[attr-defined]
+    monkeypatch.setattr(auth.typer, "confirm", lambda *a, **k: True)  # type: ignore[attr-defined]
+
+    with respx.mock:
+        respx.post("https://leetcode.com/graphql").mock(
+            return_value=Response(
+                200, json={"data": {"userStatus": {"username": "tester", "isSignedIn": True}}}
+            )
+        )
+        respx.get("https://api.github.com/user").mock(return_value=Response(401, json={}))
+        auth.run_login(Console(record=True))
+
+    assert auth.load_github_pat() is None
+
+
 def test_run_status_reports_not_logged_in() -> None:
     console = Console(record=True)
     auth.run_status(console)

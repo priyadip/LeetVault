@@ -149,7 +149,34 @@ One-way-door decisions get flagged and stopped on instead of logged here.
 
 ## Phase 4 — Git
 
-_(filled in when started)_
+- **PAT collection folded into `login`**, not a new command: v1's command list is fixed
+  (`login, import, sync, watch, status, logout, config`), and `login`'s own docstring already
+  said "store LEETCODE_SESSION + csrftoken (and optionally a GitHub PAT)" back in Phase 0. After
+  a successful LeetCode login, `run_login` asks (`typer.confirm`, default No) whether to also
+  store a GitHub PAT, validates it live against `GET https://api.github.com/user`, and only
+  stores it in `keyring` (key `github_pat`) if that succeeds. Declining, or running
+  non-interactively (tests, piped stdin), is caught (`typer.Abort`/`EOFError`/`OSError` from
+  Click's prompt machinery) and just skips silently - login itself is unaffected either way.
+  Target repo is set via the existing generic `leetvault config repo_url <url>` - no new command
+  needed there either.
+- **Transient-PAT push, literally**: `git_writer.push()` never calls `git remote add` (which
+  would persist the URL, PAT included, into `.git/config`). It builds an authenticated URL
+  (`https://x-access-token:<pat>@host/path`) purely as the destination argument to
+  `repo.git.push(url, "HEAD:refs/heads/<branch>")` - GitPython shells out to `git push <url>
+  <refspec>` and nothing about that URL is ever written to disk. `GitCommandError` messages
+  (which otherwise echo the full failed command, PAT included) are scrubbed
+  (`text.replace(pat, "***")`) before being wrapped in `GitWriterError` and re-raised - the
+  original exception is never re-surfaced (`from None`), so nothing upstream can print the raw
+  PAT even accidentally.
+- **One commit per run, not per submission**: `sync_to_github()` is called exactly once at the
+  end of `run_import`/`run_sync`, after every file for that run has already been written to
+  disk - `git add -A` + one commit + one push covers the whole batch, per CLAUDE.md's "never one
+  push per submission." It's a true no-op (`git status --porcelain` empty after staging) when a
+  run stored zero new submissions, satisfying "no dupes on re-run" without needing to track
+  anything beyond git's own working-tree state.
+- **GitHub is fully optional or a no-op**: if `repo_url` isn't configured or no PAT is stored,
+  `import`/`sync` still do everything else (DB + disk files) and just print a note explaining
+  how to enable it - the tool is useful standalone before Phase 4's GitHub piece is even set up.
 
 ## Phase 5 — README
 

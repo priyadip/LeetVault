@@ -1,9 +1,22 @@
 from pathlib import Path
 
+import pytest
+import respx
+from git import GitCommandError
+from httpx import Response
+
 from leetvault.client import ProblemMeta
 from leetvault.git_writer import (
+    GitWriterError,
+    _authenticated_url,
+    _scrub,
     ensure_notes,
+    ensure_repo,
     file_extension,
+    push,
+    stage_and_commit,
+    sync_to_github,
+    validate_github_pat,
     write_history,
     write_latest_and_metadata,
 )
@@ -54,3 +67,92 @@ def test_ensure_notes_is_idempotent(tmp_path: Path) -> None:
     path.write_text("my custom notes", encoding="utf-8")
     path_again = ensure_notes(tmp_path, PROBLEM)
     assert path_again.read_text(encoding="utf-8") == "my custom notes"
+
+
+def test_ensure_repo_inits_then_reopens(tmp_path: Path) -> None:
+    repo1 = ensure_repo(tmp_path)
+    assert (tmp_path / ".git").exists()
+    repo2 = ensure_repo(tmp_path)
+    assert repo1.working_tree_dir == repo2.working_tree_dir
+
+
+def test_stage_and_commit_noop_then_commits(tmp_path: Path) -> None:
+    repo = ensure_repo(tmp_path)
+    assert stage_and_commit(repo, "empty") is False
+
+    (tmp_path / "file.txt").write_text("hello", encoding="utf-8")
+    assert stage_and_commit(repo, "add file") is True
+    assert repo.head.commit.message == "add file"
+
+    # nothing changed since the last commit
+    assert stage_and_commit(repo, "should be no-op") is False
+
+
+def test_authenticated_url_injects_token_without_leaking_in_repr() -> None:
+    url = _authenticated_url("https://github.com/owner/repo.git", "ghp_secret123")
+    assert url == "https://x-access-token:ghp_secret123@github.com/owner/repo.git"
+
+
+def test_scrub_removes_pat_from_text() -> None:
+    assert _scrub("ghp_secret123", "remote: error ghp_secret123 rejected") == (
+        "remote: error *** rejected"
+    )
+
+
+def test_push_wraps_git_command_error_and_scrubs_pat(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = ensure_repo(tmp_path)
+    pat = "ghp_supersecret"
+
+    class _FailingGit:
+        def push(self, url: str, refspec: str) -> None:
+            raise GitCommandError(["git", "push", url, refspec], 1, stderr=f"denied for {pat}")
+
+    monkeypatch.setattr(repo, "git", _FailingGit())
+
+    with pytest.raises(GitWriterError) as exc_info:
+        push(repo, "https://github.com/owner/repo.git", pat)
+    assert pat not in str(exc_info.value)
+    assert "***" in str(exc_info.value)
+
+
+@respx.mock
+def test_validate_github_pat_success() -> None:
+    respx.get("https://api.github.com/user").mock(
+        return_value=Response(200, json={"login": "octocat"})
+    )
+    assert validate_github_pat("ghp_x") == "octocat"
+
+
+@respx.mock
+def test_validate_github_pat_failure() -> None:
+    respx.get("https://api.github.com/user").mock(return_value=Response(401, json={}))
+    assert validate_github_pat("bad-token") is None
+
+
+def test_sync_to_github_noop_when_nothing_changed(tmp_path: Path) -> None:
+    from rich.console import Console
+
+    ensure_repo(tmp_path)  # pre-existing empty repo, nothing to stage
+    console = Console(record=True)
+    sync_to_github(console, tmp_path, "https://github.com/owner/repo.git", "pat", "msg")
+    assert "Nothing new to commit" in console.export_text()
+
+
+def test_sync_to_github_commits_and_pushes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from rich.console import Console
+
+    pushed: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "leetvault.git_writer.push",
+        lambda repo, repo_url, pat, branch="main": pushed.append((repo_url, pat)),
+    )
+
+    (tmp_path / "Problems").mkdir()
+    (tmp_path / "Problems" / "note.txt").write_text("x", encoding="utf-8")
+
+    console = Console(record=True)
+    sync_to_github(console, tmp_path, "https://github.com/owner/repo.git", "pat-value", "msg")
+    assert pushed == [("https://github.com/owner/repo.git", "pat-value")]
+    assert "Committed and pushed" in console.export_text()

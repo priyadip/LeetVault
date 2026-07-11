@@ -14,7 +14,7 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeEl
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from leetvault.auth import load_leetcode_credentials
+from leetvault.auth import load_github_pat, load_leetcode_credentials
 from leetvault.client import LeetCodeClient, ProblemMeta, RestSubmission
 from leetvault.config import ConfigStore
 from leetvault.db import (
@@ -23,7 +23,13 @@ from leetvault.db import (
     make_session_factory,
     session_scope,
 )
-from leetvault.git_writer import ensure_notes, write_history, write_latest_and_metadata
+from leetvault.git_writer import (
+    GitWriterError,
+    ensure_notes,
+    sync_to_github,
+    write_history,
+    write_latest_and_metadata,
+)
 from leetvault.models import Problem, Submission, SubmissionCode
 
 _PAGE_LIMIT = 20
@@ -151,6 +157,24 @@ def _process_submission(
     return True
 
 
+def _maybe_push_to_github(console: Console, repo_path: Path, message: str) -> None:
+    store = ConfigStore()
+    repo_url = store.get("repo_url")
+    pat = load_github_pat()
+    if not repo_url or not pat:
+        console.print(
+            "[yellow]GitHub not configured - skipping commit/push. Set a repo URL with "
+            "`leetvault config repo_url <url>` and store a GitHub PAT via `leetvault login` "
+            "to enable automatic commits.[/yellow]"
+        )
+        return
+    try:
+        sync_to_github(console, repo_path, repo_url, pat, message)
+    except GitWriterError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
+
+
 def run_import(console: Console, site: str, keep_all: bool) -> None:
     creds = load_leetcode_credentials(site)
     if creds is None:
@@ -249,6 +273,9 @@ def run_import(console: Console, site: str, keep_all: bool) -> None:
         session.add(state)
 
     console.print(f"[green]Import complete[/green]: {stored_count} submissions stored.")
+    _maybe_push_to_github(
+        console, repo_path, f"leetvault: import {stored_count} accepted submissions"
+    )
 
 
 def run_sync(console: Console, site: str, keep_all: bool) -> None:
@@ -336,3 +363,6 @@ def run_sync(console: Console, site: str, keep_all: bool) -> None:
             session.add(state)
 
     console.print(f"[green]Sync complete[/green]: {stored_count} new submissions stored.")
+    _maybe_push_to_github(
+        console, repo_path, f"leetvault: sync {stored_count} new accepted submissions"
+    )

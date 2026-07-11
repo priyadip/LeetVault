@@ -321,3 +321,62 @@ def test_run_import_backfills_sync_state_when_resumed_page_is_empty(tmp_path: Pa
         assert state.last_submission_id == 200
         assert state.last_synced_timestamp == 2000
         assert state.last_full_import_completed_at is not None
+
+
+def test_run_import_skips_github_when_unconfigured() -> None:
+    console = Console(record=True)
+    with respx.mock:
+        respx.get("https://leetcode.com/api/problems/all/").mock(
+            return_value=Response(200, json=_CATALOG_PAYLOAD)
+        )
+        respx.get("https://leetcode.com/api/submissions/").mock(
+            return_value=Response(
+                200, json={"submissions_dump": [], "has_next": False, "last_key": None}
+            )
+        )
+        sync.run_import(console, site="com", keep_all=False)
+    assert "GitHub not configured" in console.export_text()
+
+
+@respx.mock
+def test_run_import_commits_and_pushes_when_github_configured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    respx.get("https://leetcode.com/api/problems/all/").mock(
+        return_value=Response(200, json=_CATALOG_PAYLOAD)
+    )
+    respx.get("https://leetcode.com/api/submissions/").mock(
+        return_value=Response(
+            200,
+            json={
+                "submissions_dump": [
+                    _submission(200, 1, "two-sum", "Accepted", 2000, code="q1-code"),
+                ],
+                "has_next": False,
+                "last_key": None,
+            },
+        )
+    )
+    respx.post("https://leetcode.com/graphql").mock(side_effect=_graphql_callback)
+
+    store = ConfigStore()
+    store.set("repo_url", "https://github.com/owner/repo.git")
+    auth.store_github_pat("ghp_faketoken")
+
+    pushed: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "leetvault.git_writer.push",
+        lambda repo, repo_url, pat, branch="main": pushed.append((repo_url, pat)),
+    )
+
+    console = Console(record=True)
+    sync.run_import(console, site="com", keep_all=False)
+
+    assert pushed == [("https://github.com/owner/repo.git", "ghp_faketoken")]
+    assert "Committed and pushed" in console.export_text()
+
+    _, repo_path = _db_paths(tmp_path)
+    from git import Repo
+
+    repo = Repo(repo_path)
+    assert "leetvault: import 1 accepted submissions" in repo.head.commit.message
