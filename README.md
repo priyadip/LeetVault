@@ -29,13 +29,38 @@ leetvault watch                                             # or: poll automatic
 
 - `leetvault login` — store your `LEETCODE_SESSION` + `csrftoken` (and optionally a GitHub PAT)
   in the OS keyring.
-- `leetvault import` — full history import of every accepted submission (resumable, one-time
-  per site).
-- `leetvault sync` — incremental sync of new accepted submissions since the last run.
+- `leetvault import [--keep-all]` — full history import of every accepted submission
+  (resumable, one-time per site).
+- `leetvault sync [--keep-all]` — incremental sync of new accepted submissions since the last
+  run.
 - `leetvault watch` — poll LeetCode and sync automatically (`--interval`, default 90s).
 - `leetvault status` — show session validity/expiry and sync state.
 - `leetvault logout` — remove stored credentials.
 - `leetvault config` — get/set persistent configuration (repo URL, DB path, dedup window, ...).
+
+### `--keep-all`
+
+By default, `import`/`sync` keep only the **newest** accepted submission per problem within a
+rolling 24-hour window (`dedup_window_seconds` in `leetvault config`, default `86400`) — solving
+the same problem twice in one sitting doesn't clutter history with near-duplicate attempts.
+`--keep-all` disables that and stores every accepted submission individually:
+
+```bash
+leetvault sync --keep-all      # one-off: keep everything from this run onward
+leetvault import --keep-all    # same, for the initial full-history import
+```
+
+To make this the permanent default instead of retyping the flag every time:
+
+```bash
+leetvault config dedup_window_seconds 0
+```
+
+`--keep-all` only changes how *future* submissions are processed — it can't retroactively
+recover a submission an earlier (non-`--keep-all`) run already deduped, since `sync` only walks
+forward from the last submission it saw. See
+[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md#i-solved-a-problem-again-but-github-still-only-shows-the-old-solution)
+if you hit that.
 
 ## What gets stored
 
@@ -51,8 +76,8 @@ Problems/<slug>/
 README.md                 auto-generated dashboard: progress, streaks, full solutions table
 ```
 
-By default, same-day accepted submissions for the same problem are deduplicated (only the
-newest is kept); pass `--keep-all` to `import`/`sync` to disable that.
+Deduplicated by default within a 24h window — see [`--keep-all`](#--keep-all) above to change
+that.
 
 ## Honest limits
 
