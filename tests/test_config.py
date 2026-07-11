@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from leetvault.config import DEFAULTS, ConfigStore
+from rich.console import Console
+
+from leetvault.config import DEFAULTS, ConfigStore, run_config
 
 
 def test_load_returns_defaults_when_missing(tmp_path: Path) -> None:
@@ -20,3 +22,30 @@ def test_resolved_db_path_falls_back_to_data_dir(tmp_path: Path) -> None:
     store = ConfigStore(path=tmp_path / "config.json")
     resolved = store.resolved_db_path()
     assert resolved.name == "leetvault.db"
+
+
+def test_run_config_shows_resolved_default_for_db_path() -> None:
+    console = Console(record=True)
+    run_config(console, key="db_path", value=None)
+    output = console.export_text()
+    assert "leetvault.db" in output
+    assert "(default)" in output
+
+
+def test_run_config_shows_explicit_value_without_default_marker() -> None:
+    store = ConfigStore()
+    store.set("db_path", "/custom/path/leetvault.db")
+    console = Console(record=True)
+    run_config(console, key="db_path", value=None)
+    output = console.export_text()
+    assert "/custom/path/leetvault.db" in output
+    assert "(default)" not in output
+
+
+def test_run_config_list_all_shows_resolved_defaults() -> None:
+    console = Console(record=True)
+    run_config(console, key=None, value=None)
+    output = console.export_text()
+    assert "db_path" in output
+    assert "leetvault.db" in output
+    assert "(default)" in output

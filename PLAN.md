@@ -261,4 +261,41 @@ One-way-door decisions get flagged and stopped on instead of logged here.
 
 ## Phase 7 — Packaging/CI/docs
 
-_(filled in when started)_
+- **Verified the wheel actually bundles `templates/`**: built a real wheel
+  (`python -m build --wheel`), inspected its contents, confirmed
+  `leetvault/templates/README.md.j2` is present (hatchling's default `packages =
+  ["src/leetvault"]` behavior includes the whole tree, non-`.py` files included, with no extra
+  config needed), then installed that wheel into a throwaway venv and ran `leetvault --help`
+  from it successfully - not just `pip install -e .`, an actual built-artifact install.
+- **`docs/DEVELOPER.md`, `CONTRIBUTING.md`, `docs/FAQ.md`, `docs/TROUBLESHOOTING.md`,
+  `CHANGELOG.md` added**; top-level `README.md` rewritten as the install/quickstart/commands
+  entry point linking out to all of them plus `docs/ARCHITECTURE.md` and `PLAN.md`.
+  `CONTRIBUTING.md` sits at repo root (GitHub's special-cased location), not under `docs/`.
+- **Writing TROUBLESHOOTING.md surfaced a real UX bug**: `leetvault config db_path` (or
+  `repo_path`) printed the literal stored value, which is `None` until the user explicitly sets
+  one — never showing the actual resolved default path the tool is using. Fixed `run_config` to
+  show the resolved value with an `(default)` marker whenever the raw stored value is unset, for
+  both single-key lookups and the no-argument "print everything" form. Regression-tested.
+- **CI** (`.github/workflows/ci.yml`, already scaffolded in Phase 0): `test` job matrix is
+  `[ubuntu-latest, windows-latest, macos-latest] x [3.11, 3.12, 3.13]` with `fail-fast: false`;
+  separate `lint` job runs `ruff check`, `ruff format --check`, `mypy --strict` on ubuntu only.
+- **Publish workflow** (`.github/workflows/publish.yml`, new): tag-push-triggered (`v*`),
+  three sequential jobs - `build` (sdist+wheel via `python -m build`, uploaded as an artifact),
+  `publish-testpypi` (`needs: build`, OIDC `id-token: write`, targets
+  `test.pypi.org/legacy/`), `publish-pypi` (`needs: publish-testpypi`, OIDC `id-token: write`,
+  targets real PyPI). Real PyPI publish is structurally impossible unless the TestPyPI dry-run
+  job succeeds first, since it's a hard `needs:` dependency, not just an ordering hint.
+- **Known gap, stated honestly rather than glossed over**: this local repo has no GitHub
+  remote configured (that's expected - the two Phase 4 checkpoint credentials were for the
+  user's separate LeetCode *solutions* mirror repo, `priyadip/DSA-LeetCode-`, not for
+  leetvault's own source). That means CI has **not** actually been exercised on GitHub's
+  runners, and the TestPyPI dry-run has **not** actually been executed - both require: (1)
+  pushing this source repo to a real GitHub remote, and (2) the user configuring PyPI/TestPyPI
+  Trusted Publisher settings (project name `leetvault`, this repo, workflow filename
+  `publish.yml`) on pypi.org/test.pypi.org themselves, which is an account-level action only
+  the user can do. What *was* verified locally, standing in for CI as closely as this
+  environment allows: `pytest`/`ruff check`/`ruff format --check`/`mypy --strict` all clean on
+  this machine (Python 3.12, Windows); a real wheel build + throwaway-venv install; and YAML
+  syntax validation of both workflow files. The placeholder `github.com/leetvault/leetvault`
+  URLs in `pyproject.toml`/`README.md` should be updated to wherever this source actually ends
+  up hosted before a real release.

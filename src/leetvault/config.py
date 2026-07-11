@@ -91,15 +91,27 @@ class ConfigStore:
         return data_dir() / "repo"
 
 
+_RESOLVED_KEYS: dict[str, Any] = {
+    "db_path": ConfigStore.resolved_db_path,
+    "repo_path": ConfigStore.resolved_repo_path,
+}
+
+
 def run_config(console: Console, key: str | None, value: str | None) -> None:
     store = ConfigStore()
     if key is None:
         data = store.load()
         for k, v in sorted(data.items()):
+            if v is None and k in _RESOLVED_KEYS:
+                v = f"{_RESOLVED_KEYS[k](store)} (default)"
             console.print(f"[bold]{k}[/bold] = {v}")
         return
     if value is None:
-        console.print(store.get(key))
+        raw = store.get(key)
+        if raw is None and key in _RESOLVED_KEYS:
+            console.print(f"{_RESOLVED_KEYS[key](store)} (default)")
+        else:
+            console.print(raw)
         return
     parsed: Any = value
     if value.lower() in ("true", "false"):

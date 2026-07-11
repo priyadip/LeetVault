@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "leetvault" }]
+keywords = ["leetcode", "cli", "sync", "github", "backup", "sqlite"]
 classifiers = [
     "Environment :: Console",
     "Intended Audience :: Developers",
@@ -37,6 +38,9 @@ leetvault = "leetvault.cli:app"
 
 [project.urls]
 Homepage = "https://github.com/leetvault/leetvault"
+Repository = "https://github.com/leetvault/leetvault"
+Issues = "https://github.com/leetvault/leetvault/issues"
+Changelog = "https://github.com/leetvault/leetvault/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
