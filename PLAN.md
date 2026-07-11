@@ -177,6 +177,21 @@ One-way-door decisions get flagged and stopped on instead of logged here.
 - **GitHub is fully optional or a no-op**: if `repo_url` isn't configured or no PAT is stored,
   `import`/`sync` still do everything else (DB + disk files) and just print a note explaining
   how to enable it - the tool is useful standalone before Phase 4's GitHub piece is even set up.
+- **Live push bug found and fixed**: the first live push attempt failed with a real GitHub 403
+  (the fine-grained PAT initially had `Contents: Read` only, not `Read and write` - a user-side
+  permission issue, not a code bug, and confirmed our error path handled it correctly: clean
+  scrubbed message, exit 1, no PAT leaked anywhere in `git`'s own command echo or our error
+  text). But that failed run had already *committed* successfully before the push failed -
+  and the original `sync_to_github` only ever called `push()` inside the `if committed:` branch,
+  so the next run (nothing new to stage) printed "Nothing new to commit" and returned **without
+  even attempting a push**, permanently stranding that commit locally. Fixed: `sync_to_github`
+  now always attempts a push whenever `repo.head.is_valid()` (i.e. at least one commit exists),
+  regardless of whether *this* run created a new one. Regression-tested in
+  `test_sync_to_github_still_pushes_unpushed_commit_when_nothing_new_to_commit`.
+- **Live end-to-end verification**: after fixing the PAT's GitHub permissions, `leetvault sync`
+  against the real `priyadip/DSA-LeetCode-` repo committed and pushed successfully - confirmed
+  by comparing local `HEAD` against `origin/main` via a fresh `git fetch` (exact match) and by
+  listing `Problems/` via the GitHub Contents API (all 10 problem directories present).
 
 ## Phase 5 — README
 

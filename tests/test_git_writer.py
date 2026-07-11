@@ -156,3 +156,29 @@ def test_sync_to_github_commits_and_pushes(tmp_path: Path, monkeypatch: pytest.M
     sync_to_github(console, tmp_path, "https://github.com/owner/repo.git", "pat-value", "msg")
     assert pushed == [("https://github.com/owner/repo.git", "pat-value")]
     assert "Committed and pushed" in console.export_text()
+
+
+def test_sync_to_github_still_pushes_unpushed_commit_when_nothing_new_to_commit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression test: a prior run may have committed successfully but failed to push
+    (e.g. a bad PAT) - this happened for real during Phase 4's live smoke test. The next
+    run must still push that stranded commit even with no new files to stage."""
+    from rich.console import Console
+
+    repo = ensure_repo(tmp_path)
+    (tmp_path / "already-committed.txt").write_text("x", encoding="utf-8")
+    assert stage_and_commit(repo, "prior commit") is True
+
+    pushed: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "leetvault.git_writer.push",
+        lambda repo, repo_url, pat, branch="main": pushed.append((repo_url, pat)),
+    )
+
+    console = Console(record=True)
+    sync_to_github(console, tmp_path, "https://github.com/owner/repo.git", "pat-value", "msg")
+    assert pushed == [("https://github.com/owner/repo.git", "pat-value")]
+    output = console.export_text()
+    assert "Nothing new to commit" in output
+    assert "Pushed" in output

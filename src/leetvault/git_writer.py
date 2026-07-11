@@ -182,14 +182,25 @@ def validate_github_pat(pat: str) -> str | None:
 def sync_to_github(
     console: Console, repo_path: Path, repo_url: str, pat: str, message: str
 ) -> None:
-    """Commit + push everything written by this run. A no-op if nothing changed."""
+    """Commit everything written by this run (no-op if nothing changed), then always
+    attempt a push - even with nothing new to commit, an earlier run's commit may still be
+    sitting unpushed (e.g. a prior push attempt failed), and this must not strand it."""
     repo = ensure_repo(repo_path)
-    if not stage_and_commit(repo, message):
+    committed = stage_and_commit(repo, message)
+    if not committed:
         console.print("[green]Nothing new to commit.[/green]")
-        return
+
+    if not repo.head.is_valid():
+        return  # no commits exist yet at all - nothing to push
+
     try:
         push(repo, repo_url, pat)
     except GitWriterError as exc:
         console.print(f"[red]Push failed:[/red] {exc}")
         raise
+
+    if committed:
+        console.print(f"[green]Committed and pushed[/green]: {message}")
+    else:
+        console.print("[green]Pushed[/green] previously committed changes.")
     console.print(f"[green]Committed and pushed[/green]: {message}")
