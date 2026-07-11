@@ -5,6 +5,20 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-11
+
+### Fixed
+
+- `leetvault config dedup_window_seconds 0` (intended as a persistent alternative to typing
+  `--keep-all` every run) silently did nothing - the fallback `raw or 86400` treated an
+  explicit `0` the same as "unset". Fixed to check for `None` explicitly.
+
+### Docs
+
+- Clarified that `--keep-all` only affects future processing and cannot retroactively recover
+  a submission an earlier run already deduped; added recovery guidance to
+  docs/TROUBLESHOOTING.md and docs/FAQ.md.
+
 ## [0.1.1] - 2026-07-11
 
 ### Fixed
@@ -32,6 +46,7 @@ Initial release.
 - `watch`: polling loop with graceful shutdown and session-expiry warnings.
 - `config`: get/set persistent settings.
 
-[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/priyadip/LeetVault/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/priyadip/LeetVault/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/priyadip/LeetVault/releases/tag/v0.1.0

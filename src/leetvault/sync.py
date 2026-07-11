@@ -204,6 +204,16 @@ def _maybe_push_to_github(console: Console, repo_path: Path, message: str) -> No
         raise typer.Exit(code=1) from None
 
 
+def _resolve_dedup_window(store: ConfigStore, keep_all: bool) -> int:
+    if keep_all:
+        return 0
+    raw = store.get("dedup_window_seconds")
+    # `raw or 86400` would silently ignore an explicit `0` (falsy) - that's exactly the
+    # value someone would set via `leetvault config dedup_window_seconds 0` to make
+    # --keep-all the persistent default instead of retyping the flag every run.
+    return int(raw) if raw is not None else 86400
+
+
 def run_import(console: Console, site: str, keep_all: bool) -> None:
     creds = load_leetcode_credentials(site)
     if creds is None:
@@ -211,7 +221,7 @@ def run_import(console: Console, site: str, keep_all: bool) -> None:
         raise typer.Exit(code=1)
 
     store = ConfigStore()
-    dedup_window = 0 if keep_all else int(store.get("dedup_window_seconds") or 86400)
+    dedup_window = _resolve_dedup_window(store, keep_all)
     repo_path = store.resolved_repo_path()
     repo_path.mkdir(parents=True, exist_ok=True)
 
@@ -315,7 +325,7 @@ def run_sync(console: Console, site: str, keep_all: bool) -> None:
         raise typer.Exit(code=1)
 
     store = ConfigStore()
-    dedup_window = 0 if keep_all else int(store.get("dedup_window_seconds") or 86400)
+    dedup_window = _resolve_dedup_window(store, keep_all)
     repo_path = store.resolved_repo_path()
     repo_path.mkdir(parents=True, exist_ok=True)
 

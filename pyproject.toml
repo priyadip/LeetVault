@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "leetvault"
-version = "0.1.1"
+version = "0.1.2"
 description = "Mirror your LeetCode account (accepted submissions + source + metadata) into a normalized SQLite DB and a GitHub repo with an auto-generated README dashboard."
 readme = "README.md"
 requires-python = ">=3.11"

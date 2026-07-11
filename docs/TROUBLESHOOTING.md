@@ -48,6 +48,33 @@ Check `leetvault status` and the target repo's default branch - leetvault always
 still succeed (creating/updating a `main` branch), but it won't be what GitHub shows by
 default. Rename the branch on GitHub or set `main` as the target repo's default.
 
+## I solved a problem again, but GitHub still only shows the old solution
+
+Two different things can cause this - check which one you're hitting:
+
+1. **The two submissions are within the dedup window (default 24h) of each other.** This is
+   expected behavior, not a bug: leetvault keeps only the newest accepted submission per
+   problem within that window. Check `Problems/<slug>/metadata.json`'s `latest_submission_id`
+   - if it matches your *newer* submission's ID (visible in the LeetCode submissions list
+     URL), `latest.py` is already correct and just has fewer intermediate attempts than you
+     expected. Run with `--keep-all` (or set `dedup_window_seconds` to `0`, see the FAQ) to
+     keep every attempt going forward.
+2. **You already ran `sync` once *without* `--keep-all` after making the newer submission**,
+   and it advanced past that submission (deduping it) before you decided you wanted it kept.
+   `--keep-all` only changes how *future* submissions are handled - it can't retroactively
+   pull back something a prior run already decided to drop, because `sync` only walks forward
+   from the last submission it saw. If this happens, the fix is to roll `sync_state` back to
+   just before the affected submission and re-run `sync --keep-all`; there's no built-in
+   command for this in v1 (open an issue if you hit it and need a hand).
+
+If neither of those explains it, check `metadata.json`'s `timestamp` field against the
+submission you expect to be latest - if it's stuck on an *old* submission despite a newer one
+existing and being outside any dedup window, that's a real bug (this exact class of bug was
+found and fixed in `0.1.1`/`0.1.2` - make sure you're on the latest release:
+`pip install --upgrade leetvault`, and if you have an editable/dev install, also confirm
+`pip show leetvault` still reports `Editable project location` rather than a stale non-editable
+copy shadowing it).
+
 ## `watch` doesn't seem to notice a new solve
 
 `watch` polls, it doesn't get pushed notifications - a fresh solve is picked up within one

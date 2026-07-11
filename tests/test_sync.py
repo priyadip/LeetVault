@@ -15,6 +15,7 @@ from leetvault import auth, sync
 from leetvault.config import ConfigStore
 from leetvault.db import get_or_create_sync_state, make_engine, make_session_factory, session_scope
 from leetvault.models import Problem, Submission, SubmissionCode
+from leetvault.sync import _resolve_dedup_window
 
 _CATALOG_PAYLOAD = {
     "stat_status_pairs": [
@@ -458,3 +459,28 @@ def test_run_import_commits_and_pushes_when_github_configured(
 
     repo = Repo(repo_path)
     assert "leetvault: import 1 accepted submissions" in repo.head.commit.message
+
+
+def test_resolve_dedup_window_keep_all_flag() -> None:
+    store = ConfigStore()
+    assert _resolve_dedup_window(store, keep_all=True) == 0
+
+
+def test_resolve_dedup_window_default() -> None:
+    store = ConfigStore()
+    assert _resolve_dedup_window(store, keep_all=False) == 86400
+
+
+def test_resolve_dedup_window_explicit_zero_disables_dedup_persistently() -> None:
+    # Regression test: `raw or 86400` previously treated an explicit 0 (falsy) the same as
+    # unset, silently ignoring `leetvault config dedup_window_seconds 0` - the only way to
+    # make --keep-all's effect permanent without retyping the flag every run.
+    store = ConfigStore()
+    store.set("dedup_window_seconds", 0)
+    assert _resolve_dedup_window(store, keep_all=False) == 0
+
+
+def test_resolve_dedup_window_custom_value() -> None:
+    store = ConfigStore()
+    store.set("dedup_window_seconds", 3600)
+    assert _resolve_dedup_window(store, keep_all=False) == 3600

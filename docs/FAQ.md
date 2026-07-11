@@ -27,10 +27,22 @@ Not in v1. Credentials are keyed by `--site` (`com`/`cn`), not by account - logg
 for the same site overwrites the previous session.
 
 **Does it store every submission, or just the latest per problem?**
-Every *accepted* submission, with same-day-per-problem deduplication by default (only the
-newest accepted submission for a given problem on a given day is kept; use `--keep-all` on
-`import`/`sync` to disable that). Non-accepted attempts (Wrong Answer, TLE, etc.) are never
-stored.
+Every *accepted* submission, deduplicated by default: only the newest accepted submission for
+a given problem within a rolling 24-hour window is kept (the exact window is
+`dedup_window_seconds` in `leetvault config`, default `86400`). Non-accepted attempts (Wrong
+Answer, TLE, etc.) are never stored. `latest.py`/`metadata.json` always reflect whichever
+accepted submission for that problem is truly newest, even if it arrives in a later `sync` run
+than the one that first stored that problem.
+
+**How do I keep every accepted submission, even near-duplicates minutes apart?**
+Pass `--keep-all` to `import`/`sync`, or make it the permanent default with
+`leetvault config dedup_window_seconds 0` (so you never have to remember the flag). Note that
+`--keep-all` only affects *future* processing - it can't retroactively un-dedupe a submission
+that an earlier run (without `--keep-all`) already decided to drop, since `sync` only walks
+forward from the last submission it saw. If you turned dedup off *after* losing an earlier
+attempt, that specific submission is still on LeetCode and can be recovered, but leetvault has
+no built-in command for it in v1 - see
+[docs/TROUBLESHOOTING.md](TROUBLESHOOTING.md#i-solved-a-problem-again-but-github-still-only-shows-the-old-solution).
 
 **Why does `import` only run once?**
 It's a full-history operation, gated on having completed successfully before. Re-running it is
