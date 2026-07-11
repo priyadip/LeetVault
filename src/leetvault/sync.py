@@ -12,7 +12,7 @@ import typer
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from leetvault.auth import load_github_pat, load_leetcode_credentials
 from leetvault.client import LeetCodeClient, ProblemMeta, RestSubmission
@@ -30,7 +30,8 @@ from leetvault.git_writer import (
     write_history,
     write_latest_and_metadata,
 )
-from leetvault.models import Problem, Submission, SubmissionCode
+from leetvault.models import Problem, Submission, SubmissionCode, Topic
+from leetvault.readme import generate_readme
 
 _PAGE_LIMIT = 20
 _PAGE_DELAY_RANGE = (0.3, 0.5)
@@ -53,7 +54,9 @@ def _last_kept_timestamps(session: Session) -> dict[int, int]:
     return {question_id: ts for question_id, ts in rows}
 
 
-def _upsert_problem(session: Session, meta: ProblemMeta) -> Problem:
+def _upsert_problem(
+    session: Session, client: LeetCodeClient, meta: ProblemMeta, console: Console
+) -> Problem:
     problem = session.get(Problem, meta.question_id)
     if problem is None:
         problem = Problem(
@@ -66,6 +69,18 @@ def _upsert_problem(session: Session, meta: ProblemMeta) -> Problem:
             url=meta.url,
         )
         session.add(problem)
+        # Topic tags aren't in REST's submissions dump or /api/problems/all/ - fetch once
+        # per newly-seen problem (not per submission) and cache in the DB forever.
+        try:
+            for topic_name in client.question_topics(meta.title_slug):
+                topic = session.scalar(select(Topic).where(Topic.name == topic_name))
+                if topic is None:
+                    topic = Topic(name=topic_name)
+                    session.add(topic)
+                    session.flush()
+                problem.topics.append(topic)
+        except Exception as exc:  # noqa: BLE001 - topics are best-effort, never fatal
+            console.print(f"[yellow]Could not fetch topics for {meta.title_slug}: {exc}[/yellow]")
     return problem
 
 
@@ -119,7 +134,7 @@ def _process_submission(
         )
         return False
 
-    problem = _upsert_problem(session, meta)
+    problem = _upsert_problem(session, client, meta, console)
     submission = Submission(
         submission_id=sub.submission_id,
         question_id=sub.question_id,
@@ -155,6 +170,11 @@ def _process_submission(
 
     last_kept[sub.question_id] = sub.timestamp
     return True
+
+
+def _regenerate_readme(factory: sessionmaker[Session], repo_path: Path) -> None:
+    with session_scope(factory) as session:
+        generate_readme(session, repo_path)
 
 
 def _maybe_push_to_github(console: Console, repo_path: Path, message: str) -> None:
@@ -273,6 +293,7 @@ def run_import(console: Console, site: str, keep_all: bool) -> None:
         session.add(state)
 
     console.print(f"[green]Import complete[/green]: {stored_count} submissions stored.")
+    _regenerate_readme(factory, repo_path)
     _maybe_push_to_github(
         console, repo_path, f"leetvault: import {stored_count} accepted submissions"
     )
@@ -363,6 +384,7 @@ def run_sync(console: Console, site: str, keep_all: bool) -> None:
             session.add(state)
 
     console.print(f"[green]Sync complete[/green]: {stored_count} new submissions stored.")
+    _regenerate_readme(factory, repo_path)
     _maybe_push_to_github(
         console, repo_path, f"leetvault: sync {stored_count} new accepted submissions"
     )

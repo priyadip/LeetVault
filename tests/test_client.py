@@ -124,6 +124,35 @@ def test_recent_ac_submissions_parses_shape() -> None:
     assert items[0].title_slug == "two-sum"
 
 
+@respx.mock
+def test_question_topics_parses_shape() -> None:
+    respx.post("https://leetcode.com/graphql").mock(
+        return_value=Response(
+            200,
+            json={
+                "data": {
+                    "question": {
+                        "topicTags": [{"name": "Array"}, {"name": "Hash Table"}],
+                    }
+                }
+            },
+        )
+    )
+    with LeetCodeClient(CREDS) as client:
+        topics = client.question_topics("two-sum")
+    assert topics == ["Array", "Hash Table"]
+
+
+@respx.mock
+def test_question_topics_empty_when_question_missing() -> None:
+    respx.post("https://leetcode.com/graphql").mock(
+        return_value=Response(200, json={"data": {"question": None}})
+    )
+    with LeetCodeClient(CREDS) as client:
+        topics = client.question_topics("nonexistent-slug")
+    assert topics == []
+
+
 def test_rate_limiter_sleeps_when_window_exhausted(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_now = [0.0]
     sleeps: list[float] = []

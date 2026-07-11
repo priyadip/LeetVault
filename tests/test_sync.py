@@ -41,6 +41,11 @@ _CATALOG_PAYLOAD = {
     ]
 }
 
+_TOPIC_TAGS = {
+    "two-sum": ["Array", "Hash Table"],
+    "validate-bst": ["Tree", "Binary Search Tree"],
+}
+
 
 def _submission(
     sub_id: int, question_id: int, slug: str, status: str, timestamp: int, code: str = "code"
@@ -78,6 +83,13 @@ def _graphql_callback(request: httpx.Request) -> Response:
                     }
                 }
             },
+        )
+    if "questionData" in query:
+        slug = body["variables"]["titleSlug"]
+        tags = _TOPIC_TAGS.get(slug, [])
+        return Response(
+            200,
+            json={"data": {"question": {"topicTags": [{"name": t} for t in tags]}}},
         )
     raise AssertionError(f"unexpected graphql query: {query}")
 
@@ -135,7 +147,11 @@ def test_run_import_dedups_same_day_and_writes_files(tmp_path: Path) -> None:
     factory = make_session_factory(engine)
     with session_scope(factory) as session:
         ids = set(session.scalars(select(Submission.submission_id)))
-    assert ids == {300, 200}  # 100 deduped (same-day as 200), 150 not accepted
+        assert ids == {300, 200}  # 100 deduped (same-day as 200), 150 not accepted
+
+        two_sum = session.scalar(select(Problem).where(Problem.title_slug == "two-sum"))
+        assert two_sum is not None
+        assert {t.name for t in two_sum.topics} == {"Array", "Hash Table"}
 
     two_sum_dir = repo_path / "Problems" / "two-sum"
     assert (two_sum_dir / "latest.py").read_text(encoding="utf-8") == "q1-newer"

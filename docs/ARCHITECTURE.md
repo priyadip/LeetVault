@@ -72,3 +72,12 @@ Live-verified against the real account (`priyadipsau`) during Phase 2:
   completed-import flag but a null `last_submission_id` if the run resumed onto an
   already-fully-paged (empty) page, permanently breaking `sync`. Neither was caught by the
   mocked test suite alone — both only surfaced by actually running the tool.
+- **Topic tags require a query CLAUDE.md never named**: `GraphQL question(titleSlug) {
+  topicTags { name } }` — live-verified, works, returns `[{name, slug}]` (slug unused). Wired
+  into `sync.py` as a once-per-newly-seen-problem enrichment call, same failure-tolerance
+  pattern as `submissionDetails`.
+- **A live GitHub push surfaced a real bug in the git layer** (see PLAN.md Phase 4): an initial
+  push failed with a genuine 403 (PAT permissions, user-side, not a code issue — confirmed our
+  error handling was correct: clean scrubbed message, no leak), but the commit it made *before*
+  failing was left stranded, since the old `sync_to_github` only pushed inside the
+  "just committed" branch. Fixed to always attempt a push whenever any local commit exists.

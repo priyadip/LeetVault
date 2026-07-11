@@ -195,7 +195,36 @@ One-way-door decisions get flagged and stopped on instead of logged here.
 
 ## Phase 5 — README
 
-_(filled in when started)_
+- **Topics gap discovered and closed**: nothing before this phase ever populated the
+  `topics`/`problem_topics` tables - neither REST's submissions dump nor `/api/problems/all/`
+  carries topic tags. Live-verified `question(titleSlug) { topicTags { name } }` via GraphQL
+  works and added `client.question_topics()` + wired it into `sync.py`'s `_upsert_problem`,
+  fetched once per newly-seen problem (not per submission, not on every run) and cached in the
+  DB permanently - a solved-problem count's worth of extra API calls total, ever, not per sync.
+  Failures there are logged and swallowed (best-effort, same pattern as `submission_details`).
+  Backfilled topics for the 10 problems imported before this feature existed (against the real
+  account) so the live README demonstrates it rather than showing "no topic data yet".
+- **Language stat source**: "language" in the README reflects each problem's *most recent*
+  accepted submission's `lang`, not every language ever used to solve it - matches "Solved" in
+  the sense of "how did I solve it most recently."
+- **Streak definition**: computed over distinct UTC calendar dates with >=1 accepted submission.
+  "Current streak" is the trailing consecutive run ending at the most recent solve date, not
+  "as of right now" - avoids an awkward edge case where the streak would reset to 0 immediately
+  after `sync` runs on a day with no new solves yet, even though the user is still "in" a streak
+  by any reasonable reading. "Longest streak" is the longest run anywhere in history.
+- **Regenerated every run, before push**: `generate_readme()` runs after all DB writes for an
+  import/sync (so it reflects the run's own new data) and before `_maybe_push_to_github`, so
+  README.md is staged and committed in the same commit as the solution files it describes -
+  never a separate/lagging commit.
+- **Rendering**: Jinja2 `PackageLoader("leetvault", "templates")`, `autoescape` explicitly
+  disabled (`select_autoescape(enabled_extensions=())`) since this is Markdown output, not
+  HTML - autoescaping would mangle things like `<` in problem titles unnecessarily. Progress
+  bars are plain Unicode block characters (`█`/`░`), which render fine in GitHub-flavored
+  Markdown and don't need any charting library.
+- **Live-verified**: ran `leetvault sync` against the real account after backfilling topics;
+  confirmed via the GitHub Contents API that the generated README.md landed in the same commit,
+  renders all sections (progress bars, streak, languages, topics, recent, full table) correctly,
+  and reflects the actual DB contents exactly.
 
 ## Phase 6 — Watch
 

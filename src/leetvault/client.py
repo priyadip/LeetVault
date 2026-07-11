@@ -166,6 +166,16 @@ query submissionDetails($submissionId: Int!) {
 }
 """
 
+_QUESTION_TOPICS_QUERY = """
+query questionData($titleSlug: String!) {
+  question(titleSlug: $titleSlug) {
+    topicTags {
+      name
+    }
+  }
+}
+"""
+
 _RECENT_AC_SUBMISSIONS_QUERY = """
 query recentAcSubmissions($username: String!, $limit: Int!) {
   recentAcSubmissionList(username: $username, limit: $limit) {
@@ -321,6 +331,12 @@ class LeetCodeClient:
             code=detail.get("code"),
             lang=lang.get("name"),
         )
+
+    def question_topics(self, title_slug: str) -> list[str]:
+        data = self.graphql(_QUESTION_TOPICS_QUERY, {"titleSlug": title_slug})
+        question = data.get("data", {}).get("question") or {}
+        tags = question.get("topicTags") or []
+        return [tag["name"] for tag in tags]
 
     def recent_ac_submissions(self, username: str, limit: int = 20) -> list[RecentAcSubmission]:
         data = self.graphql(_RECENT_AC_SUBMISSIONS_QUERY, {"username": username, "limit": limit})
