@@ -93,6 +93,21 @@ class RecentAcSubmission:
     timestamp: int
 
 
+@dataclass
+class ProblemMeta:
+    question_id: int
+    frontend_id: int
+    title: str
+    title_slug: str
+    difficulty: str
+    paid_only: bool
+    url: str
+
+
+# stat_status_pairs[].difficulty.level from /api/problems/all/ - confirmed live.
+_DIFFICULTY_LEVELS: dict[int, str] = {1: "Easy", 2: "Medium", 3: "Hard"}
+
+
 class RateLimiter:
     """Sliding-window limiter: at most `max_requests` calls per `window_seconds`."""
 
@@ -245,6 +260,34 @@ class LeetCodeClient:
         )
         response.raise_for_status()
         return _parse_submissions_page(response.json())
+
+    def get_all_problems(self) -> list[ProblemMeta]:
+        """Fetch the full problem catalog in one call - REST's submissions dump gives no
+        difficulty/paid_only/frontend_id, so this fills those in for the `problems` table."""
+        response = self._request("GET", "/api/problems/all/")
+        response.raise_for_status()
+        payload = response.json()
+        base_url = SITE_BASE_URLS[self.site]
+        problems = []
+        for pair in payload.get("stat_status_pairs", []):
+            stat = pair["stat"]
+            title_slug = stat["question__title_slug"]
+            level: int | None = (pair.get("difficulty") or {}).get("level")
+            difficulty = (
+                _DIFFICULTY_LEVELS.get(level, "Unknown") if level is not None else "Unknown"
+            )
+            problems.append(
+                ProblemMeta(
+                    question_id=int(stat["question_id"]),
+                    frontend_id=int(stat["frontend_question_id"]),
+                    title=stat["question__title"],
+                    title_slug=title_slug,
+                    difficulty=difficulty,
+                    paid_only=bool(pair.get("paid_only", False)),
+                    url=f"{base_url}/problems/{title_slug}/",
+                )
+            )
+        return problems
 
     def graphql(self, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
         response = self._request(

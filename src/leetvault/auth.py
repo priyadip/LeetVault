@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import jwt
@@ -26,23 +25,17 @@ def _csrftoken_key(site: str) -> str:
     return f"leetcode_csrftoken:{site}"
 
 
-@dataclass
-class StoredCredentials:
-    leetcode_session: str
-    csrftoken: str
-
-
 def store_leetcode_credentials(site: str, leetcode_session: str, csrftoken: str) -> None:
     keyring.set_password(SERVICE_NAME, _session_key(site), leetcode_session)
     keyring.set_password(SERVICE_NAME, _csrftoken_key(site), csrftoken)
 
 
-def load_leetcode_credentials(site: str) -> StoredCredentials | None:
+def load_leetcode_credentials(site: str) -> LeetCodeCredentials | None:
     session = keyring.get_password(SERVICE_NAME, _session_key(site))
     csrftoken = keyring.get_password(SERVICE_NAME, _csrftoken_key(site))
     if session is None or csrftoken is None:
         return None
-    return StoredCredentials(leetcode_session=session, csrftoken=csrftoken)
+    return LeetCodeCredentials(leetcode_session=session, csrftoken=csrftoken)
 
 
 def clear_leetcode_credentials(site: str) -> None:

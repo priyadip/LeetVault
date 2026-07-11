@@ -84,6 +84,12 @@ class ConfigStore:
         d.mkdir(parents=True, exist_ok=True)
         return d / "leetvault.db"
 
+    def resolved_repo_path(self) -> Path:
+        raw = self.get("repo_path")
+        if raw:
+            return Path(raw)
+        return data_dir() / "repo"
+
 
 def run_config(console: Console, key: str | None, value: str | None) -> None:
     store = ConfigStore()

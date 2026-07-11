@@ -60,3 +60,15 @@ Live-verified against the real account (`priyadipsau`) during Phase 2:
   `submissions_dump` field (`id`, `question_id`, `title`, `title_slug`, `status_display`, `lang`,
   `runtime`, `memory`, `timestamp`, `url`, `code`, top-level `has_next`/`last_key`) came back
   exactly as coded in `client.py` on the first live call — no further changes needed there.
+- **`/api/problems/all/` (not named in CLAUDE.md) supplies the fields REST's submissions dump
+  lacks.** `stat_status_pairs[].{stat.question_id, stat.frontend_question_id,
+  stat.question__title, stat.question__title_slug, difficulty.level, paid_only}` — confirmed
+  live, ~4000 problems in one response. `client.get_all_problems()` maps `difficulty.level`
+  1/2/3 to `Easy`/`Medium`/`Hard`.
+- **A live `import` + `sync` smoke run against the real account surfaced two real bugs** (both
+  fixed, both regression-tested where the fix is unit-testable — see PLAN.md Phase 3 for
+  detail): (1) `rich`'s progress bar crashed on this Windows console's cp1252 codepage via
+  rich's legacy Win32 console render path; (2) `run_import` could finalize `sync_state` with a
+  completed-import flag but a null `last_submission_id` if the run resumed onto an
+  already-fully-paged (empty) page, permanently breaking `sync`. Neither was caught by the
+  mocked test suite alone — both only surfaced by actually running the tool.

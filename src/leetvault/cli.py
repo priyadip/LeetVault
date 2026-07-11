@@ -2,15 +2,25 @@
 
 from __future__ import annotations
 
+import sys
+
 import typer
 from rich.console import Console
+
+if sys.platform == "win32":
+    # Legacy Windows consoles (cp1252 etc.) can't encode the Unicode spinner/bar glyphs
+    # rich's Win32 console API path emits, which crashes `import`/`sync`/`watch` progress
+    # bars outright. Force UTF-8 + a non-legacy render path so those glyphs just work.
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            _stream.reconfigure(encoding="utf-8", errors="replace")
 
 app = typer.Typer(
     name="leetvault",
     help="Mirror your LeetCode account into a normalized SQLite DB and a GitHub dashboard repo.",
     no_args_is_help=True,
 )
-console = Console()
+console = Console(legacy_windows=False)
 
 
 @app.command()

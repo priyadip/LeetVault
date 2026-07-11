@@ -87,7 +87,65 @@ One-way-door decisions get flagged and stopped on instead of logged here.
 
 ## Phase 3 — Sync engine
 
-_(filled in when started)_
+- **Problem metadata source**: REST `/api/submissions/` gives no `difficulty`/`paid_only`/
+  `frontend_id`. Added `client.get_all_problems()` hitting the real (live-verified)
+  `/api/problems/all/` endpoint once per run/import to build a `question_id -> ProblemMeta`
+  catalog (`stat_status_pairs[].{stat.question_id, stat.frontend_question_id,
+  stat.question__title, stat.question__title_slug}`, `difficulty.level` (1/2/3 ->
+  Easy/Medium/Hard), `paid_only`) - a single cheap call rather than one GraphQL
+  `questionData` lookup per problem.
+- **Dedup semantics**: "same problem within same day" is implemented as - process submissions
+  newest-first (REST's natural order, confirmed live); the first submission seen for a
+  `question_id` in a run is always kept and becomes that problem's "latest"; a later
+  (older) submission for the same problem is dropped if `prior_kept_timestamp - this_timestamp
+  < dedup_window_seconds`. The per-problem "last kept timestamp" dict is seeded from
+  `MAX(timestamp) GROUP BY question_id` over the existing DB at the start of the run, so dedup
+  is correct across run boundaries too, not just within one page. `--keep-all` skips the check
+  entirely but still only writes `latest.<ext>`/`metadata.json`/`notes.md` for the first
+  (newest) submission per problem per run - older kept submissions still get a `history/`
+  entry, just don't become "latest".
+- **Percentile enrichment**: `submission_details()` (GraphQL) is called for every *kept*
+  (post-dedup) accepted submission, not just when REST's `code` is missing - CLAUDE.md's schema
+  wants `runtime_percentile`/`memory_percentile` stored, and dedup already collapses the volume
+  down to roughly "problems solved" rather than "total accepted attempts", so the extra
+  API call per kept submission is acceptable under the existing rate limiter. Failures there are
+  logged and swallowed (best-effort enrichment, never fatal - REST's `code`/`runtime`/`memory`
+  are always sufficient on their own).
+- **`import` is a one-time full-history operation per site**: gated on
+  `sync_state.last_full_import_completed_at`. A second `import` call is a pure no-op (zero HTTP
+  calls) once that's set - re-running does no redundant work, per the Phase 3 acceptance
+  criterion. Interrupted imports resume from `sync_state.last_offset`, persisted after every
+  page (not just at the end), satisfying "Import MUST be resumable."
+- **`sync` is separate from `import`'s resumability**: it always starts at REST offset 0 and
+  walks forward only until it hits a submission whose id/timestamp is already known
+  (`sync_state.last_submission_id`/`last_synced_timestamp`), then stops. It refuses to run at
+  all (exits 1) if no prior `import` has ever completed, since it has nothing to anchor "new"
+  against.
+- **Bug found via live smoke run** (not caught by mocked tests): a `run_import` that resumes
+  onto an already-fully-paged offset (i.e. `page.submissions` comes back empty) never touches
+  `newest_submission_id` in that run, so the old code left `last_submission_id`/
+  `last_synced_timestamp` as `None` even after marking `last_full_import_completed_at` -
+  silently breaking every future `sync` (which requires a non-null `last_submission_id`).
+  Reproduced for real: an earlier `import` run against the live account committed all data
+  correctly per-page but crashed afterward on an unrelated Windows console bug (see below)
+  before reaching its finalization block; the next `import` invocation resumed straight to the
+  empty tail page and would have finalized with `last_submission_id = None` were it not for
+  the fix. Fixed by falling back to `SELECT submission_id, timestamp ORDER BY timestamp DESC
+  LIMIT 1` from the DB when `newest_submission_id` is `None` and no prior value exists.
+  Regression-tested in `tests/test_sync.py::test_run_import_backfills_sync_state_when_resumed_page_is_empty`.
+- **Windows console bug found via the same live smoke run**: `rich`'s `Progress`/spinner
+  writes Unicode glyphs (braille spinner, block-drawing bar) through its legacy Win32 console
+  API path on Windows consoles that report a non-UTF-8 codepage (cp1252 here), crashing with
+  `UnicodeEncodeError` on every `import`/`sync`/`watch` invocation that shows a progress bar.
+  Fixed in `cli.py`: reconfigure `sys.stdout`/`sys.stderr` to UTF-8 and construct the shared
+  `Console` with `legacy_windows=False` so rich always takes the ANSI-escape render path
+  instead of the raw Win32 console API. Confirmed fixed by re-running the same live import.
+- **Live smoke test**: ran `leetvault import` then `leetvault sync` against the real account
+  (`priyadipsau`, site `com`). Correctly pulled 25 total submissions, kept 10 accepted+deduped
+  ones (e.g. `target-sum` had two same-day accepted submissions and correctly kept only the
+  newer as `latest.py`, with only the newer submission's `history/` entry), wrote the full
+  `Problems/<slug>/{latest.py, history/, metadata.json, notes.md}` layout, and a follow-up
+  `sync` correctly found zero new submissions.
 
 ## Phase 4 — Git
 
