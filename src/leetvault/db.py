@@ -6,11 +6,41 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from sqlalchemy import URL, create_engine, select
+from sqlalchemy import URL, create_engine, inspect, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from leetvault.models import Base, SyncState
+
+
+def _add_missing_columns(engine: Engine) -> None:
+    """Additively migrate an existing DB to match the current models.
+
+    `create_all` only creates missing *tables*, never new columns on existing ones, so a
+    DB written by an older leetvault would keep working but silently lack any column added
+    since. There's no migration framework here (and an additive-only schema doesn't need
+    one), so this reconciles the difference directly. SQLite's ALTER TABLE ADD COLUMN is
+    cheap and non-destructive.
+    """
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+
+    with engine.begin() as connection:
+        for table in Base.metadata.sorted_tables:
+            if table.name not in existing_tables:
+                continue  # create_all just made it, so it is already current
+            present = {col["name"] for col in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in present:
+                    continue
+                if not column.nullable and column.default is None:
+                    # Can't backfill a NOT NULL column with no default on existing rows;
+                    # skip rather than corrupt the table. No such column exists today.
+                    continue
+                col_type = column.type.compile(engine.dialect)
+                connection.execute(
+                    text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {col_type}')
+                )
 
 
 def make_engine(db_path: Path) -> Engine:
@@ -18,6 +48,7 @@ def make_engine(db_path: Path) -> Engine:
     url = URL.create("sqlite", database=str(db_path))
     engine = create_engine(url, future=True)
     Base.metadata.create_all(engine)
+    _add_missing_columns(engine)
     return engine
 
 

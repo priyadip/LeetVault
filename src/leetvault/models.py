@@ -46,6 +46,10 @@ class Submission(Base):
     timestamp: Mapped[int] = mapped_column(index=True)
     code_hash: Mapped[str]
     is_accepted: Mapped[bool]
+    # Judge test-case counts. LeetCode reports how many hidden cases ran and passed, but
+    # never the cases themselves.
+    total_correct: Mapped[int | None] = mapped_column(default=None)
+    total_testcases: Mapped[int | None] = mapped_column(default=None)
 
     problem: Mapped[Problem] = relationship(back_populates="submissions")
     code: Mapped[SubmissionCode | None] = relationship(

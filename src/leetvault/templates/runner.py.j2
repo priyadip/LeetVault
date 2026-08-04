@@ -168,6 +168,12 @@ def run(problem_dir: Path) -> int:
     raw_cases = runner_info.get("example_testcases") or ""
 
     print(f"{metadata.get('frontend_id')}. {metadata.get('title')}  [{metadata.get('difficulty')}]")
+    judged = metadata.get("total_testcases")
+    if judged:
+        print(
+            f"Accepted on LeetCode against {metadata.get('total_correct')}/{judged} judge "
+            "test cases (only the examples below are available locally)."
+        )
     print("-" * 60)
 
     if not method_name:

@@ -5,6 +5,19 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-04
+
+### Added
+
+- Record how many of LeetCode's hidden judge test cases each submission ran against
+  (`total_correct`/`total_testcases`) in the DB, in `metadata.json`, and in `run.py`'s header.
+  LeetCode exposes these counts but never the cases themselves - one real problem here was
+  judged against 11,511 of them.
+- Existing databases are migrated additively on open (SQLite `ALTER TABLE ADD COLUMN`), and
+  counts for already-stored submissions are backfilled on the next sync.
+- A `.gitignore` is written to the solutions repo so running a solution doesn't commit
+  `__pycache__`.
+
 ## [0.5.0] - 2026-08-04
 
 ### Added
@@ -109,7 +122,8 @@ Initial release.
 - `watch`: polling loop with graceful shutdown and session-expiry warnings.
 - `config`: get/set persistent settings.
 
-[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/priyadip/LeetVault/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/priyadip/LeetVault/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/priyadip/LeetVault/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/priyadip/LeetVault/compare/v0.2.0...v0.3.0

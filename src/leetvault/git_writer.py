@@ -83,6 +83,8 @@ def write_latest_and_metadata(
     runtime_percentile: float | None,
     memory_percentile: float | None,
     runner: dict[str, object] | None = None,
+    total_correct: int | None = None,
+    total_testcases: int | None = None,
 ) -> tuple[Path, Path]:
     p_dir = problem_dir(repo_path, problem.title_slug)
     p_dir.mkdir(parents=True, exist_ok=True)
@@ -114,6 +116,10 @@ def write_latest_and_metadata(
         "memory": memory,
         "runtime_percentile": runtime_percentile,
         "memory_percentile": memory_percentile,
+        # How many of LeetCode's hidden judge cases ran/passed. The cases themselves are
+        # never exposed by the API - only these counts.
+        "total_correct": total_correct,
+        "total_testcases": total_testcases,
         "runner": runner,
     }
     metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
@@ -134,6 +140,23 @@ def runner_info_from_meta(detail: QuestionDetail) -> dict[str, object]:
         "param_types": [p.get("type") for p in meta.get("params") or []],
         "example_testcases": detail.example_testcases,
     }
+
+
+def update_metadata_counts(
+    repo_path: Path, title_slug: str, total_correct: int | None, total_testcases: int | None
+) -> bool:
+    """Merge judge test-case counts into an existing metadata.json."""
+    path = problem_dir(repo_path, title_slug) / "metadata.json"
+    if not path.exists():
+        return False
+    try:
+        metadata = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return False
+    metadata["total_correct"] = total_correct
+    metadata["total_testcases"] = total_testcases
+    path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
+    return True
 
 
 def update_metadata_runner(repo_path: Path, title_slug: str, runner: dict[str, object]) -> bool:

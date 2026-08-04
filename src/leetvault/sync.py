@@ -30,6 +30,7 @@ from leetvault.git_writer import (
     question_md_path,
     runner_info_from_meta,
     sync_to_github,
+    update_metadata_counts,
     update_metadata_runner,
     write_devcontainer,
     write_history,
@@ -162,10 +163,14 @@ def _process_submission(
     code = sub.code
     runtime_percentile: float | None = None
     memory_percentile: float | None = None
+    total_correct: int | None = None
+    total_testcases: int | None = None
     try:
         detail = client.submission_details(sub.submission_id)
         runtime_percentile = detail.runtime_percentile
         memory_percentile = detail.memory_percentile
+        total_correct = detail.total_correct
+        total_testcases = detail.total_testcases
         if not code:
             code = detail.code
     except Exception as exc:  # noqa: BLE001 - enrichment is best-effort, never fatal
@@ -192,6 +197,8 @@ def _process_submission(
         timestamp=sub.timestamp,
         code_hash=hashlib.sha256(code.encode("utf-8")).hexdigest(),
         is_accepted=True,
+        total_correct=total_correct,
+        total_testcases=total_testcases,
     )
     submission.code = SubmissionCode(code=code)
     problem.submissions.append(submission)
@@ -210,11 +217,76 @@ def _process_submission(
             sub.memory,
             runtime_percentile,
             memory_percentile,
+            total_correct=total_correct,
+            total_testcases=total_testcases,
         )
         ensure_notes(repo_path, meta)
         last_kept[sub.question_id] = sub.timestamp
 
     return True
+
+
+def _backfill_testcase_counts(
+    console: Console,
+    factory: sessionmaker[Session],
+    client: LeetCodeClient,
+    repo_path: Path,
+) -> int:
+    """Fetch judge test-case counts for submissions stored before they were recorded.
+
+    Only touches rows where the count is still unknown, so this is a zero-call no-op once
+    every stored submission has one.
+    """
+    with session_scope(factory) as session:
+        pending = [
+            (s.submission_id, s.question_id)
+            for s in session.scalars(select(Submission).where(Submission.total_testcases.is_(None)))
+        ]
+
+    if not pending:
+        return 0
+
+    updated = 0
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Fetching judge test-case counts", total=len(pending))
+        for submission_id, _ in pending:
+            try:
+                detail = client.submission_details(submission_id)
+            except Exception:  # noqa: BLE001 - best-effort enrichment
+                progress.advance(task)
+                continue
+            if detail.total_testcases is not None:
+                with session_scope(factory) as session:
+                    row = session.get(Submission, submission_id)
+                    if row is not None:
+                        row.total_correct = detail.total_correct
+                        row.total_testcases = detail.total_testcases
+                        session.add(row)
+                updated += 1
+            progress.advance(task)
+
+    # metadata.json is rewritten from the DB below, so refresh the "latest" rows on disk.
+    if updated:
+        with session_scope(factory) as session:
+            for problem in session.scalars(select(Problem)):
+                if not problem.submissions:
+                    continue
+                latest = max(problem.submissions, key=lambda s: s.timestamp)
+                if latest.total_testcases is None:
+                    continue
+                update_metadata_counts(
+                    repo_path, problem.title_slug, latest.total_correct, latest.total_testcases
+                )
+        console.print(
+            f"[green]Recorded judge test-case counts[/green] for {updated} submission(s)."
+        )
+    return updated
 
 
 def _backfill_question_md(
@@ -398,6 +470,7 @@ def run_import(console: Console, site: str, keep_all: bool) -> None:
 
         if write_question:
             _backfill_question_md(console, factory, client, repo_path)
+        _backfill_testcase_counts(console, factory, client, repo_path)
 
     with session_scope(factory) as session:
         state = get_or_create_sync_state(session, site)
@@ -508,6 +581,7 @@ def run_sync(console: Console, site: str, keep_all: bool) -> None:
 
         if write_question:
             _backfill_question_md(console, factory, client, repo_path)
+        _backfill_testcase_counts(console, factory, client, repo_path)
 
     if newest_submission_id is not None:
         with session_scope(factory) as session:

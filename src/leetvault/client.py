@@ -84,6 +84,10 @@ class SubmissionDetail:
     memory_percentile: float | None
     code: str | None
     lang: str | None
+    # How many of the judge's hidden test cases this submission passed. LeetCode exposes
+    # the counts but never the cases themselves.
+    total_correct: int | None = None
+    total_testcases: int | None = None
 
 
 @dataclass
@@ -185,6 +189,8 @@ query submissionDetails($submissionId: Int!) {
     memory
     memoryPercentile
     code
+    totalCorrect
+    totalTestcases
     lang {
       name
     }
@@ -362,6 +368,8 @@ class LeetCodeClient:
             memory_percentile=detail.get("memoryPercentile"),
             code=detail.get("code"),
             lang=lang.get("name"),
+            total_correct=detail.get("totalCorrect"),
+            total_testcases=detail.get("totalTestcases"),
         )
 
     def question_detail(self, title_slug: str) -> QuestionDetail:
