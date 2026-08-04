@@ -5,6 +5,25 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-04
+
+### Added
+
+- Recover the judge test case that broke each *failed* attempt. A failed submission is the
+  only place LeetCode reveals an actual hidden test case - input, expected output and all -
+  and those are exactly the edge cases worth keeping.
+- `run.py` re-checks them after the examples with a real PASS/FAIL verdict. This is possible
+  here precisely because these cases carry LeetCode's expected output, which the statement
+  examples do not.
+- A one-time backward scan collects failures that predate this feature, gated on a
+  sync_state flag so later syncs don't re-walk the whole history.
+
+### Notes
+
+- Failed attempts are stored in their own `failed_testcases` table, not in `submissions`.
+  Everything downstream (dedup, "problems solved", latest-per-problem, README stats) assumes
+  `submissions` holds accepted work only.
+
 ## [0.6.0] - 2026-08-04
 
 ### Added
@@ -122,7 +141,8 @@ Initial release.
 - `watch`: polling loop with graceful shutdown and session-expiry warnings.
 - `config`: get/set persistent settings.
 
-[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/priyadip/LeetVault/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/priyadip/LeetVault/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/priyadip/LeetVault/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/priyadip/LeetVault/compare/v0.3.0...v0.4.0

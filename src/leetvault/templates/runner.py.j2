@@ -219,7 +219,51 @@ def run(problem_dir: Path) -> int:
         print(f"  -> {result!r}\n")
 
     print("Expected outputs are in question.md (LeetCode's API doesn't expose them).")
+
+    _run_regressions(metadata, method, len(params))
     return 0
+
+
+def _run_regressions(metadata: dict[str, Any], method: Any, param_count: int) -> None:
+    """Re-check the judge cases that broke earlier attempts at this problem.
+
+    Unlike the statement examples, these carry LeetCode's expected output, so here a
+    real pass/fail verdict is possible rather than guesswork.
+    """
+    cases = metadata.get("failed_testcases") or []
+    if not cases:
+        return
+
+    print()
+    print("=" * 60)
+    print(f"Judge cases that broke earlier attempts ({len(cases)}):")
+    print("=" * 60)
+
+    for i, case in enumerate(cases, start=1):
+        args = _parse_cases(case.get("input") or "", param_count)
+        label = case.get("status", "failed")
+        if not args:
+            print(f"\n[{i}] ({label}) input could not be parsed automatically:")
+            print(f"    {case.get('input')!r}")
+            continue
+        try:
+            result = method(*args[0])
+        except Exception as exc:  # noqa: BLE001
+            print(f"\n[{i}] ({label}) raised {type(exc).__name__}: {exc}")
+            continue
+
+        expected_raw = case.get("expected_output")
+        print(f"\n[{i}] originally {label}")
+        print(f"    input    : {json.dumps(args[0])[:200]}")
+        print(f"    expected : {expected_raw}")
+        print(f"    got      : {json.dumps(result, default=str)}")
+        if expected_raw is None:
+            continue
+        try:
+            passes = result == json.loads(expected_raw)
+        except (ValueError, TypeError):
+            passes = str(result) == str(expected_raw)
+        print(f"    {'PASS - now fixed' if passes else 'FAIL - still wrong'}")
 
 
 def main(argv: list[str]) -> int:

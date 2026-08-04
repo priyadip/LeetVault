@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import random
 import time
+from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -31,6 +32,7 @@ from leetvault.git_writer import (
     runner_info_from_meta,
     sync_to_github,
     update_metadata_counts,
+    update_metadata_failed_cases,
     update_metadata_runner,
     write_devcontainer,
     write_history,
@@ -40,7 +42,7 @@ from leetvault.git_writer import (
     write_shared_runner,
     write_solutions_gitignore,
 )
-from leetvault.models import Problem, Submission, SubmissionCode, Topic
+from leetvault.models import FailedTestCase, Problem, Submission, SubmissionCode, Topic
 from leetvault.readme import generate_readme
 
 _PAGE_LIMIT = 20
@@ -118,6 +120,35 @@ def _upsert_problem(
     return problem
 
 
+def _record_failed_testcase(session: Session, client: LeetCodeClient, sub: RestSubmission) -> bool:
+    """Save the judge case that broke a failed submission, if it's new.
+
+    Costs one submissionDetails call per *failed* submission, once ever - they're a small
+    fraction of a history and never revisited.
+    """
+    if session.get(FailedTestCase, sub.submission_id) is not None:
+        return False
+    try:
+        detail = client.submission_details(sub.submission_id)
+    except Exception:  # noqa: BLE001 - best-effort, never fatal
+        return False
+    if not detail.last_testcase:
+        return False  # compile errors and some TLEs carry no specific case
+
+    session.add(
+        FailedTestCase(
+            submission_id=sub.submission_id,
+            question_id=sub.question_id,
+            status=sub.status_display,
+            timestamp=sub.timestamp,
+            input_data=detail.last_testcase,
+            expected_output=detail.expected_output,
+            actual_output=detail.code_output,
+        )
+    )
+    return True
+
+
 def _process_submission(
     *,
     session: Session,
@@ -133,6 +164,7 @@ def _process_submission(
 ) -> bool:
     """Store + write one accepted submission to disk. Returns True if it was kept."""
     if not sub.is_accepted:
+        _record_failed_testcase(session, client, sub)
         return False
     if session.get(Submission, sub.submission_id) is not None:
         return False
@@ -224,6 +256,79 @@ def _process_submission(
         last_kept[sub.question_id] = sub.timestamp
 
     return True
+
+
+def _scan_history_for_failures(
+    console: Console,
+    factory: sessionmaker[Session],
+    client: LeetCodeClient,
+    site: str,
+) -> int:
+    """One-time backward walk of the submission history to collect failed test cases.
+
+    `sync` only ever moves forward from the last known submission, so failures that
+    predate this feature would never be seen otherwise. Gated on a sync_state flag so a
+    full history walk happens once, not on every sync.
+    """
+    with session_scope(factory) as session:
+        state = get_or_create_sync_state(session, site)
+        if state.failed_scan_completed_at is not None:
+            return 0
+        known_question_ids = {p.question_id for p in session.scalars(select(Problem))}
+
+    found = 0
+    offset = 0
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Scanning history for failed attempts", total=None)
+        while True:
+            page = client.get_submissions_page(offset=offset, limit=_PAGE_LIMIT)
+            if not page.submissions:
+                break
+            with session_scope(factory) as session:
+                for sub in page.submissions:
+                    # Only for problems already tracked - a failure on a problem never
+                    # solved has no folder in the repo to live in.
+                    if sub.is_accepted or sub.question_id not in known_question_ids:
+                        continue
+                    if _record_failed_testcase(session, client, sub):
+                        found += 1
+            offset += len(page.submissions)
+            progress.update(task, description=f"Scanning history for failed attempts ({offset})")
+            if not page.has_next:
+                break
+            _sleep_between_pages()
+
+    with session_scope(factory) as session:
+        state = get_or_create_sync_state(session, site)
+        state.failed_scan_completed_at = int(time.time())
+        session.add(state)
+
+    if found:
+        console.print(f"[green]Recovered {found} failing test case(s)[/green] from past attempts.")
+    return found
+
+
+def _write_failed_testcases(factory: sessionmaker[Session], repo_path: Path) -> None:
+    """Push each problem's recovered failing cases into its metadata.json."""
+    with session_scope(factory) as session:
+        by_problem: dict[int, list[dict[str, object]]] = defaultdict(list)
+        for case in session.scalars(select(FailedTestCase).order_by(FailedTestCase.timestamp)):
+            by_problem[case.question_id].append(
+                {
+                    "status": case.status,
+                    "input": case.input_data,
+                    "expected_output": case.expected_output,
+                }
+            )
+        for problem in session.scalars(select(Problem)):
+            cases = by_problem.get(problem.question_id)
+            if cases:
+                update_metadata_failed_cases(repo_path, problem.title_slug, cases)
 
 
 def _backfill_testcase_counts(
@@ -471,6 +576,8 @@ def run_import(console: Console, site: str, keep_all: bool) -> None:
         if write_question:
             _backfill_question_md(console, factory, client, repo_path)
         _backfill_testcase_counts(console, factory, client, repo_path)
+        _scan_history_for_failures(console, factory, client, site)
+        _write_failed_testcases(factory, repo_path)
 
     with session_scope(factory) as session:
         state = get_or_create_sync_state(session, site)
@@ -582,6 +689,8 @@ def run_sync(console: Console, site: str, keep_all: bool) -> None:
         if write_question:
             _backfill_question_md(console, factory, client, repo_path)
         _backfill_testcase_counts(console, factory, client, repo_path)
+        _scan_history_for_failures(console, factory, client, site)
+        _write_failed_testcases(factory, repo_path)
 
     if newest_submission_id is not None:
         with session_scope(factory) as session:

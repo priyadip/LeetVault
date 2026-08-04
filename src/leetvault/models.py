@@ -86,6 +86,25 @@ class ProblemTopic(Base):
     topic_id: Mapped[int] = mapped_column(ForeignKey("topics.id"), primary_key=True)
 
 
+class FailedTestCase(Base):
+    """A judge test case that broke one of your submissions.
+
+    Deliberately its own table rather than rows in `submissions`: everything downstream
+    (dedup, "problems solved", latest-per-problem, README stats) assumes `submissions`
+    holds accepted work only, and mixing failures in would quietly corrupt all of it.
+    """
+
+    __tablename__ = "failed_testcases"
+
+    submission_id: Mapped[int] = mapped_column(primary_key=True)
+    question_id: Mapped[int] = mapped_column(ForeignKey("problems.question_id"), index=True)
+    status: Mapped[str]  # Wrong Answer / Time Limit Exceeded / Runtime Error
+    timestamp: Mapped[int]
+    input_data: Mapped[str]
+    expected_output: Mapped[str | None] = mapped_column(default=None)
+    actual_output: Mapped[str | None] = mapped_column(default=None)
+
+
 class SyncState(Base):
     __tablename__ = "sync_state"
 
@@ -95,3 +114,6 @@ class SyncState(Base):
     last_submission_id: Mapped[int | None] = mapped_column(default=None)
     last_synced_timestamp: Mapped[int | None] = mapped_column(default=None)
     last_full_import_completed_at: Mapped[int | None] = mapped_column(default=None)
+    # Set once the one-time backward scan for failed submissions has finished, so later
+    # syncs don't re-walk the whole submission history looking for them.
+    failed_scan_completed_at: Mapped[int | None] = mapped_column(default=None)

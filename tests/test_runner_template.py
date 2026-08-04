@@ -136,3 +136,67 @@ def test_runner_reports_a_raising_solution_without_crashing(tmp_path: Path) -> N
     )
     out = _run(p_dir)
     assert "raised ValueError: nope" in out
+
+
+def _make_problem_with_failures(
+    repo: Path, slug: str, solution: str, runner: dict[str, object], failures: list[dict]
+) -> Path:
+    p_dir = _make_problem(repo, slug, solution, runner)
+    meta = json.loads((p_dir / "metadata.json").read_text(encoding="utf-8"))
+    meta["failed_testcases"] = failures
+    (p_dir / "metadata.json").write_text(json.dumps(meta), encoding="utf-8")
+    return p_dir
+
+
+def test_runner_reports_pass_on_recovered_failing_case(tmp_path: Path) -> None:
+    """Unlike statement examples, judge cases from failed attempts carry LeetCode's
+    expected output, so a genuine pass/fail verdict is possible."""
+    p_dir = _make_problem_with_failures(
+        tmp_path,
+        "valid-anagram",
+        "class Solution:\n    def isAnagram(self, s, t):\n        return sorted(s) == sorted(t)\n",
+        {
+            "method": "isAnagram",
+            "param_types": ["string", "string"],
+            "example_testcases": '"a"\n"a"',
+        },
+        [{"status": "Wrong Answer", "input": '"aa"\n"a"', "expected_output": "false"}],
+    )
+    out = _run(p_dir)
+    assert "broke earlier attempts" in out
+    assert "originally Wrong Answer" in out
+    assert "PASS - now fixed" in out
+
+
+def test_runner_reports_fail_when_still_wrong(tmp_path: Path) -> None:
+    p_dir = _make_problem_with_failures(
+        tmp_path,
+        "still-broken",
+        "class Solution:\n    def go(self, nums):\n        return 999\n",
+        {"method": "go", "param_types": ["integer[]"], "example_testcases": "[1]"},
+        [{"status": "Wrong Answer", "input": "[1,2]", "expected_output": "3"}],
+    )
+    out = _run(p_dir)
+    assert "FAIL - still wrong" in out
+
+
+def test_runner_survives_unparseable_failing_input(tmp_path: Path) -> None:
+    p_dir = _make_problem_with_failures(
+        tmp_path,
+        "odd-input",
+        "class Solution:\n    def go(self, nums):\n        return 1\n",
+        {"method": "go", "param_types": ["integer[]"], "example_testcases": "[1]"},
+        [{"status": "Wrong Answer", "input": "not-json{", "expected_output": "1"}],
+    )
+    out = _run(p_dir)
+    assert "could not be parsed" in out
+
+
+def test_runner_without_failures_shows_no_regression_section(tmp_path: Path) -> None:
+    p_dir = _make_problem(
+        tmp_path,
+        "clean",
+        "class Solution:\n    def go(self, nums):\n        return len(nums)\n",
+        {"method": "go", "param_types": ["integer[]"], "example_testcases": "[1,2]"},
+    )
+    assert "broke earlier attempts" not in _run(p_dir)

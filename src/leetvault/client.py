@@ -88,6 +88,12 @@ class SubmissionDetail:
     # the counts but never the cases themselves.
     total_correct: int | None = None
     total_testcases: int | None = None
+    # Only populated for *failed* submissions: the single judge case that broke it. This
+    # is the one place LeetCode reveals an actual hidden test case, expected output and
+    # all - which makes it assertable, unlike the statement examples.
+    last_testcase: str | None = None
+    expected_output: str | None = None
+    code_output: str | None = None
 
 
 @dataclass
@@ -191,6 +197,9 @@ query submissionDetails($submissionId: Int!) {
     code
     totalCorrect
     totalTestcases
+    lastTestcase
+    expectedOutput
+    codeOutput
     lang {
       name
     }
@@ -370,6 +379,9 @@ class LeetCodeClient:
             lang=lang.get("name"),
             total_correct=detail.get("totalCorrect"),
             total_testcases=detail.get("totalTestcases"),
+            last_testcase=detail.get("lastTestcase") or None,
+            expected_output=detail.get("expectedOutput") or None,
+            code_output=detail.get("codeOutput") or None,
         )
 
     def question_detail(self, title_slug: str) -> QuestionDetail:

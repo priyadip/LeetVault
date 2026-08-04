@@ -14,7 +14,7 @@ from sqlalchemy import select
 from leetvault import auth, sync
 from leetvault.config import ConfigStore
 from leetvault.db import get_or_create_sync_state, make_engine, make_session_factory, session_scope
-from leetvault.models import Problem, Submission, SubmissionCode
+from leetvault.models import FailedTestCase, Problem, Submission, SubmissionCode
 from leetvault.sync import _resolve_dedup_window
 
 _CATALOG_PAYLOAD = {
@@ -668,3 +668,101 @@ def test_backfill_is_noop_when_all_statements_present(tmp_path: Path) -> None:
     sync.run_sync(console, site="com", keep_all=False)
     # nothing missing -> no fetching, no message
     assert "problem statement" not in console.export_text()
+
+
+def _failed_submission(sub_id: int, question_id: int, slug: str, status: str, ts: int) -> dict:
+    return _submission(sub_id, question_id, slug, status, ts, code="broken")
+
+
+@respx.mock
+def test_sync_records_failing_testcase_from_failed_attempt(tmp_path: Path) -> None:
+    """A failed submission's judge case is the one hidden test LeetCode reveals, so it
+    must be captured even though the submission itself is never stored as a solution."""
+    respx.get("https://leetcode.com/api/problems/all/").mock(
+        return_value=Response(200, json=_CATALOG_PAYLOAD)
+    )
+    respx.get("https://leetcode.com/api/submissions/").mock(
+        return_value=Response(
+            200,
+            json={
+                "submissions_dump": [
+                    _submission(200, 1, "two-sum", "Accepted", 2000, code="good"),
+                    _failed_submission(100, 1, "two-sum", "Wrong Answer", 1000),
+                ],
+                "has_next": False,
+                "last_key": None,
+            },
+        )
+    )
+
+    def _graphql(request: httpx.Request) -> Response:
+        body = json.loads(request.content)
+        if "submissionDetails" in body["query"]:
+            failed = body["variables"]["submissionId"] == 100
+            return Response(
+                200,
+                json={
+                    "data": {
+                        "submissionDetails": {
+                            "runtime": 10,
+                            "runtimePercentile": 50.0,
+                            "memory": 1000,
+                            "memoryPercentile": 60.0,
+                            "code": None,
+                            "totalCorrect": 0 if failed else 5,
+                            "totalTestcases": 5,
+                            "lastTestcase": "[3,3]\n6" if failed else "",
+                            "expectedOutput": "[0,1]" if failed else "",
+                            "codeOutput": "[]" if failed else "",
+                            "lang": {"name": "python3"},
+                        }
+                    }
+                },
+            )
+        return _graphql_callback(request)
+
+    respx.post("https://leetcode.com/graphql").mock(side_effect=_graphql)
+
+    sync.run_import(Console(record=True, width=200), site="com", keep_all=False)
+
+    db_path, repo_path = _db_paths(tmp_path)
+    factory = make_session_factory(make_engine(db_path))
+    with session_scope(factory) as session:
+        cases = list(session.scalars(select(FailedTestCase)))
+    assert len(cases) == 1
+    assert cases[0].status == "Wrong Answer"
+    assert cases[0].input_data == "[3,3]\n6"
+    assert cases[0].expected_output == "[0,1]"
+
+    # ...and it lands in the problem's metadata for the runner to re-check
+    meta = json.loads(
+        (repo_path / "Problems" / "two-sum" / "metadata.json").read_text(encoding="utf-8")
+    )
+    assert meta["failed_testcases"][0]["expected_output"] == "[0,1]"
+
+
+@respx.mock
+def test_failed_history_scan_runs_only_once(tmp_path: Path) -> None:
+    respx.get("https://leetcode.com/api/problems/all/").mock(
+        return_value=Response(200, json=_CATALOG_PAYLOAD)
+    )
+    respx.get("https://leetcode.com/api/submissions/").mock(
+        return_value=Response(
+            200,
+            json={
+                "submissions_dump": [
+                    _submission(200, 1, "two-sum", "Accepted", 2000, code="good"),
+                ],
+                "has_next": False,
+                "last_key": None,
+            },
+        )
+    )
+    respx.post("https://leetcode.com/graphql").mock(side_effect=_graphql_callback)
+
+    sync.run_import(Console(record=True, width=200), site="com", keep_all=False)
+
+    db_path, _ = _db_paths(tmp_path)
+    factory = make_session_factory(make_engine(db_path))
+    with session_scope(factory) as session:
+        assert get_or_create_sync_state(session, "com").failed_scan_completed_at is not None

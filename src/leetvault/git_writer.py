@@ -159,6 +159,22 @@ def update_metadata_counts(
     return True
 
 
+def update_metadata_failed_cases(
+    repo_path: Path, title_slug: str, cases: list[dict[str, object]]
+) -> bool:
+    """Store the judge cases that broke past attempts, for the runner to re-check."""
+    path = problem_dir(repo_path, title_slug) / "metadata.json"
+    if not path.exists():
+        return False
+    try:
+        metadata = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return False
+    metadata["failed_testcases"] = cases
+    path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
+    return True
+
+
 def update_metadata_runner(repo_path: Path, title_slug: str, runner: dict[str, object]) -> bool:
     """Merge runner info into an existing metadata.json. Returns False if there isn't one."""
     path = problem_dir(repo_path, title_slug) / "metadata.json"
