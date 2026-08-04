@@ -73,7 +73,8 @@ Problems/<slug>/
   history/submission_<id>.<ext>   every kept accepted submission
   metadata.json          difficulty, topics, runtime/memory percentiles, ...
   notes.md                yours - never overwritten once created
-README.md                 auto-generated dashboard: progress, streaks, full solutions table
+README.md                 auto-generated dashboard: progress, streaks, full solutions table,
+                          and clickable topic tags that jump to a per-topic problem list
 ```
 
 Deduplicated by default within a 24h window — see [`--keep-all`](#--keep-all) above to change

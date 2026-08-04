@@ -6,7 +6,13 @@ import pytest
 
 from leetvault.db import make_engine, make_session_factory, session_scope
 from leetvault.models import Problem, Submission, SubmissionCode, Topic
-from leetvault.readme import _bar, _compute_streaks, aggregate_stats, generate_readme
+from leetvault.readme import (
+    _anchor,
+    _bar,
+    _compute_streaks,
+    aggregate_stats,
+    generate_readme,
+)
 
 
 def _make_problem(
@@ -144,4 +150,69 @@ def test_generate_readme_writes_file_with_expected_sections(tmp_path: Path) -> N
     assert "# LeetCode Solutions" in content
     assert "1 problem solved" in content
     assert "two-sum" in content or "Two Sum" in content
-    assert "`Array` (1)" in content
+    assert "[Array (1)](#array)" in content
+
+
+def test_anchor_matches_github_heading_rules() -> None:
+    # Must match GitHub's own heading-anchor algorithm or the topic links silently 404.
+    assert _anchor("Array") == "array"
+    assert _anchor("Hash Table") == "hash-table"
+    assert _anchor("Heap (Priority Queue)") == "heap-priority-queue"
+    assert _anchor("Depth-First Search") == "depth-first-search"
+    assert _anchor("Union-Find") == "union-find"
+    assert _anchor("Divide and Conquer") == "divide-and-conquer"
+
+
+def test_topic_stats_carry_anchor_and_their_problems(tmp_path: Path) -> None:
+    engine = make_engine(tmp_path / "leetvault.db")
+    factory = make_session_factory(engine)
+
+    with session_scope(factory) as session:
+        array_topic = Topic(name="Array")
+        heap_topic = Topic(name="Heap (Priority Queue)")
+
+        p1 = _make_problem(1, 1, "two-sum", "Easy")
+        p1.topics.append(array_topic)
+        p1.submissions = [_make_submission(100, 1, "python3", 1000)]
+
+        p2 = _make_problem(2, 23, "merge-k-sorted-lists", "Hard")
+        p2.topics.extend([array_topic, heap_topic])
+        p2.submissions = [_make_submission(200, 2, "python3", 2000)]
+
+        session.add_all([p1, p2])
+
+    with session_scope(factory) as session:
+        stats = aggregate_stats(session)
+
+    by_name = {t.name: t for t in stats.by_topic}
+    assert by_name["Array"].count == 2
+    assert by_name["Array"].anchor == "array"
+    assert [p.frontend_id for p in by_name["Array"].problems] == [1, 23]
+
+    assert by_name["Heap (Priority Queue)"].anchor == "heap-priority-queue"
+    assert [p.frontend_id for p in by_name["Heap (Priority Queue)"].problems] == [23]
+
+
+def test_generate_readme_renders_clickable_topics_and_per_topic_sections(
+    tmp_path: Path,
+) -> None:
+    engine = make_engine(tmp_path / "leetvault.db")
+    factory = make_session_factory(engine)
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+
+    with session_scope(factory) as session:
+        p1 = _make_problem(1, 1, "two-sum", "Easy", topics=["Array"])
+        p1.submissions = [_make_submission(100, 1, "python3", 1000)]
+        session.add(p1)
+
+    with session_scope(factory) as session:
+        content = generate_readme(session, repo_path).read_text(encoding="utf-8")
+
+    # the tag in the Topics summary links to the per-topic section...
+    assert "[Array (1)](#array)" in content
+    # ...and that section exists, with the problem listed under it
+    assert "## Problems by Topic" in content
+    assert "### Array" in content
+    assert "[back to topics](#topics)" in content
+    assert content.count("Two Sum") >= 2  # once in All Solutions, once under its topic

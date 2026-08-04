@@ -5,6 +5,16 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-04
+
+### Added
+
+- Topic tags in the generated README dashboard are now clickable. Each tag links to a new
+  "Problems by Topic" section listing every problem carrying that topic (with difficulty and a
+  link to the stored solution), and each section links back up to the topic list. Anchors follow
+  GitHub's own heading-slug rules, so names like `Heap (Priority Queue)` and `Depth-First
+  Search` resolve correctly.
+
 ## [0.1.2] - 2026-07-11
 
 ### Fixed
@@ -46,7 +56,8 @@ Initial release.
 - `watch`: polling loop with graceful shutdown and session-expiry warnings.
 - `config`: get/set persistent settings.
 
-[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/priyadip/LeetVault/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/priyadip/LeetVault/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/priyadip/LeetVault/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/priyadip/LeetVault/releases/tag/v0.1.0

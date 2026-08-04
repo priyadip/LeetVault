@@ -4,7 +4,8 @@ import/sync/watch cycle so it never drifts from the DB.
 
 from __future__ import annotations
 
-from collections import Counter
+import re
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -30,6 +31,17 @@ def _bar(percent: float, width: int = _BAR_WIDTH) -> str:
     return "█" * filled + "░" * (width - filled)
 
 
+def _anchor(heading: str) -> str:
+    """GitHub's heading-anchor rules: lowercase, drop punctuation, spaces -> hyphens.
+
+    e.g. "Heap (Priority Queue)" -> "heap-priority-queue", "Depth-First Search" ->
+    "depth-first-search". Must match GitHub exactly or the topic links silently 404.
+    """
+    slug = heading.strip().lower()
+    slug = re.sub(r"[^\w\s-]", "", slug)
+    return re.sub(r"\s+", "-", slug)
+
+
 @dataclass
 class DifficultyStat:
     difficulty: str
@@ -47,12 +59,6 @@ class LanguageStat:
 
 
 @dataclass
-class TopicStat:
-    name: str
-    count: int
-
-
-@dataclass
 class SolutionEntry:
     frontend_id: int
     title: str
@@ -62,6 +68,14 @@ class SolutionEntry:
     url: str
     file_path: str
     file_name: str
+
+
+@dataclass
+class TopicStat:
+    name: str
+    count: int
+    anchor: str
+    problems: list[SolutionEntry] = field(default_factory=list)
 
 
 @dataclass
@@ -144,10 +158,22 @@ def aggregate_stats(session: Session) -> ReadmeStats:
     ]
 
     topic_counts: Counter[str] = Counter()
+    topic_entries: defaultdict[str, list[SolutionEntry]] = defaultdict(list)
     for problem in problems:
+        latest = _latest_submission(problem)
         for topic in problem.topics:
             topic_counts[topic.name] += 1
-    by_topic = [TopicStat(name=name, count=count) for name, count in topic_counts.most_common()]
+            if latest is not None:
+                topic_entries[topic.name].append(_to_entry(problem, latest))
+    by_topic = [
+        TopicStat(
+            name=name,
+            count=count,
+            anchor=_anchor(name),
+            problems=sorted(topic_entries[name], key=lambda row: row.frontend_id),
+        )
+        for name, count in topic_counts.most_common()
+    ]
 
     solved_dates = sorted(
         {

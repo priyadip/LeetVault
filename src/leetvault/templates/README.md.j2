@@ -25,7 +25,7 @@ Current streak: **{{ stats.current_streak }}** day{{ "s" if stats.current_streak
 ## Topics
 
 {% if stats.by_topic %}
-{% for t in stats.by_topic %}`{{ t.name }}` ({{ t.count }}){{ ", " if not loop.last else "" }}{% endfor %}
+{% for t in stats.by_topic %}[{{ t.name }} ({{ t.count }})](#{{ t.anchor }}){{ " · " if not loop.last else "" }}{% endfor %}
 
 {% else %}
 _No topic data yet._
@@ -46,3 +46,20 @@ _No topic data yet._
 {% for row in stats.table %}
 | {{ row.frontend_id }} | [{{ row.title }}]({{ row.url }}) | {{ row.difficulty }} | {{ row.lang }} | {{ row.date }} | [{{ row.file_name }}]({{ row.file_path }}) |
 {% endfor %}
+
+{% if stats.by_topic %}
+## Problems by Topic
+
+{% for t in stats.by_topic %}
+### {{ t.name }}
+
+{{ t.count }} problem{{ "s" if t.count != 1 else "" }} · [back to topics](#topics)
+
+| # | Problem | Difficulty | Solution |
+| --- | --- | --- | --- |
+{% for row in t.problems %}
+| {{ row.frontend_id }} | [{{ row.title }}]({{ row.url }}) | {{ row.difficulty }} | [{{ row.file_name }}]({{ row.file_path }}) |
+{% endfor %}
+
+{% endfor %}
+{% endif %}
