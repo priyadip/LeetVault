@@ -5,6 +5,22 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-04
+
+### Added
+
+- `login` now live-checks each credential and **only prompts for what's actually missing or
+  expired**. LeetCode cookies (which roll over every ~14 days) and the GitHub PAT fail
+  independently, so refreshing one no longer means re-entering the other. If both are still
+  valid, `login` prompts for nothing.
+- `login --leetcode` / `login --github` to target one credential explicitly, and `login
+  --force` to re-prompt for everything regardless of validity.
+
+### Changed
+
+- `status` now live-validates the stored GitHub PAT (reporting the account it belongs to, or
+  that it was revoked) instead of only reporting whether one is present.
+
 ## [0.2.0] - 2026-08-04
 
 ### Added
@@ -56,7 +72,8 @@ Initial release.
 - `watch`: polling loop with graceful shutdown and session-expiry warnings.
 - `config`: get/set persistent settings.
 
-[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/priyadip/LeetVault/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/priyadip/LeetVault/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/priyadip/LeetVault/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/priyadip/LeetVault/compare/v0.1.0...v0.1.1

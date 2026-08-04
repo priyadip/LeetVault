@@ -184,3 +184,135 @@ def test_run_logout_clears_credentials() -> None:
     console = Console(record=True, width=200)
     auth.run_logout(console)
     assert auth.load_leetcode_credentials("com") is None
+
+
+def test_check_leetcode_session_reports_missing() -> None:
+    ok, reason = auth.check_leetcode_session("com")
+    assert ok is False
+    assert "no session stored" in reason
+
+
+def test_check_leetcode_session_detects_expired_without_network() -> None:
+    # An already-expired JWT must short-circuit before any HTTP call - respx.mock with no
+    # routes registered would raise if a request were attempted.
+    auth.store_leetcode_credentials("com", _make_token(int(time.time()) - 3600), "csrf")
+    with respx.mock:
+        ok, reason = auth.check_leetcode_session("com")
+    assert ok is False
+    assert "expired" in reason
+
+
+def test_check_github_pat_reports_missing() -> None:
+    ok, reason = auth.check_github_pat()
+    assert ok is False
+    assert "no PAT stored" in reason
+
+
+@respx.mock
+def test_check_github_pat_detects_revoked() -> None:
+    auth.store_github_pat("ghp_revoked")
+    respx.get("https://api.github.com/user").mock(return_value=Response(401, json={}))
+    ok, reason = auth.check_github_pat()
+    assert ok is False
+    assert "rejected" in reason
+
+
+def test_run_login_skips_both_when_already_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The whole point: a valid session + valid PAT must prompt for nothing at all."""
+    auth.store_leetcode_credentials("com", _make_token(int(time.time()) + 3600), "csrf")
+    auth.store_github_pat("ghp_good")
+
+    def _no_prompting(*args: object, **kwargs: object) -> str:
+        raise AssertionError("login prompted despite valid credentials")
+
+    monkeypatch.setattr(auth.typer, "prompt", _no_prompting)
+    monkeypatch.setattr(auth.typer, "confirm", _no_prompting)
+
+    console = Console(record=True, width=200)
+    with respx.mock:
+        respx.post("https://leetcode.com/graphql").mock(
+            return_value=Response(
+                200, json={"data": {"userStatus": {"username": "tester", "isSignedIn": True}}}
+            )
+        )
+        respx.get("https://api.github.com/user").mock(
+            return_value=Response(200, json={"login": "octocat"})
+        )
+        auth.run_login(console)
+
+    output = console.export_text()
+    assert "already valid" in output
+    assert "already stored" in output
+    assert "Nothing to do" in output
+
+
+def test_run_login_refreshes_only_leetcode_when_pat_still_valid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Expired LeetCode session + good PAT: prompt for cookies only, keep the PAT."""
+    auth.store_leetcode_credentials("com", _make_token(int(time.time()) - 3600), "csrf-old")
+    auth.store_github_pat("ghp_keepme")
+
+    prompts = iter(["new.jwt.token", "csrf-new"])
+    monkeypatch.setattr(auth.typer, "prompt", lambda *a, **k: next(prompts))
+    monkeypatch.setattr(
+        auth.typer,
+        "confirm",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not ask about PAT")),
+    )
+
+    console = Console(record=True, width=200)
+    with respx.mock:
+        respx.post("https://leetcode.com/graphql").mock(
+            return_value=Response(
+                200, json={"data": {"userStatus": {"username": "tester", "isSignedIn": True}}}
+            )
+        )
+        respx.get("https://api.github.com/user").mock(
+            return_value=Response(200, json={"login": "octocat"})
+        )
+        auth.run_login(console)
+
+    creds = auth.load_leetcode_credentials("com")
+    assert creds is not None
+    assert creds.leetcode_session == "new.jwt.token"
+    assert auth.load_github_pat() == "ghp_keepme"  # untouched
+
+
+def test_run_login_github_only_leaves_leetcode_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    auth.store_leetcode_credentials("com", "existing.session", "existing-csrf")
+
+    prompts = iter(["ghp_newtoken"])
+    monkeypatch.setattr(auth.typer, "prompt", lambda *a, **k: next(prompts))
+
+    console = Console(record=True, width=200)
+    with respx.mock:
+        respx.get("https://api.github.com/user").mock(
+            return_value=Response(200, json={"login": "octocat"})
+        )
+        auth.run_login(console, github_only=True)
+
+    assert auth.load_github_pat() == "ghp_newtoken"
+    creds = auth.load_leetcode_credentials("com")
+    assert creds is not None
+    assert creds.leetcode_session == "existing.session"  # never re-prompted
+
+
+def test_run_login_force_reprompts_even_when_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    auth.store_leetcode_credentials("com", _make_token(int(time.time()) + 3600), "csrf-old")
+
+    prompts = iter(["forced.jwt", "csrf-forced"])
+    monkeypatch.setattr(auth.typer, "prompt", lambda *a, **k: next(prompts))
+
+    console = Console(record=True, width=200)
+    with respx.mock:
+        respx.post("https://leetcode.com/graphql").mock(
+            return_value=Response(
+                200, json={"data": {"userStatus": {"username": "tester", "isSignedIn": True}}}
+            )
+        )
+        auth.run_login(console, leetcode_only=True, force=True)
+
+    creds = auth.load_leetcode_credentials("com")
+    assert creds is not None
+    assert creds.leetcode_session == "forced.jwt"

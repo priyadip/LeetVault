@@ -24,11 +24,29 @@ console = Console(legacy_windows=False)
 
 
 @app.command()
-def login() -> None:
-    """Store LEETCODE_SESSION + csrftoken (and optionally a GitHub PAT) in the OS keyring."""
+def login(
+    leetcode_only: bool = typer.Option(
+        False, "--leetcode", help="Only refresh the LeetCode session; leave the GitHub PAT alone."
+    ),
+    github_only: bool = typer.Option(
+        False, "--github", help="Only refresh the GitHub PAT; leave the LeetCode session alone."
+    ),
+    force: bool = typer.Option(
+        False, "--force", help="Re-prompt even for credentials that are still valid."
+    ),
+) -> None:
+    """Store LEETCODE_SESSION + csrftoken (and optionally a GitHub PAT) in the OS keyring.
+
+    Only prompts for what's actually missing or expired - already-valid credentials are
+    left untouched.
+    """
     from leetvault.auth import run_login
 
-    run_login(console)
+    if leetcode_only and github_only:
+        console.print("[red]--leetcode and --github are mutually exclusive.[/red]")
+        raise typer.Exit(code=1)
+
+    run_login(console, leetcode_only=leetcode_only, github_only=github_only, force=force)
 
 
 @app.command(name="import")

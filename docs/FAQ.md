@@ -17,6 +17,12 @@ limits (well below the ~480-sequential-request threshold that empirically trigge
 never does anything but read your own submission history - but the ToS risk itself is not
 something leetvault can eliminate.
 
+**My LeetCode session expired but my GitHub PAT is fine - do I have to re-enter both?**
+No. `leetvault login` live-checks each credential independently and only prompts for the ones
+that are actually missing or expired; anything still valid is left untouched. You can also
+target one explicitly with `leetvault login --leetcode` or `leetvault login --github`, or
+re-enter everything with `--force`.
+
 **Where are my credentials stored?**
 In your OS's native credential store via the `keyring` library (Windows Credential Manager,
 macOS Keychain, or a Secret Service provider on Linux), under service name `leetvault`. Never

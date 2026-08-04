@@ -27,8 +27,9 @@ leetvault watch                                             # or: poll automatic
 
 ## Commands
 
-- `leetvault login` — store your `LEETCODE_SESSION` + `csrftoken` (and optionally a GitHub PAT)
-  in the OS keyring.
+- `leetvault login [--leetcode|--github] [--force]` — store your `LEETCODE_SESSION` +
+  `csrftoken` (and optionally a GitHub PAT) in the OS keyring. Only prompts for what's
+  actually missing or expired — see [below](#refreshing-credentials).
 - `leetvault import [--keep-all]` — full history import of every accepted submission
   (resumable, one-time per site).
 - `leetvault sync [--keep-all]` — incremental sync of new accepted submissions since the last
@@ -37,6 +38,22 @@ leetvault watch                                             # or: poll automatic
 - `leetvault status` — show session validity/expiry and sync state.
 - `leetvault logout` — remove stored credentials.
 - `leetvault config` — get/set persistent configuration (repo URL, DB path, dedup window, ...).
+
+### Refreshing credentials
+
+Your LeetCode session cookies expire roughly every 14 days; a GitHub PAT lasts until you revoke
+it or it hits its own expiry. They fail independently, so `login` checks each one **live** and
+only prompts for what actually needs replacing:
+
+```bash
+leetvault login            # checks both, prompts only for what's expired/missing
+leetvault login --leetcode # only refresh LeetCode cookies, never touch the stored PAT
+leetvault login --github   # only refresh the GitHub PAT, never re-ask for cookies
+leetvault login --force    # re-prompt for everything, even if still valid
+```
+
+If both are still good, `login` prompts for nothing and tells you so. `leetvault status` shows
+the same live check without changing anything.
 
 ### `--keep-all`
 
