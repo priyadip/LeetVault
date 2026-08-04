@@ -49,6 +49,9 @@ DEFAULTS: dict[str, Any] = {
     "repo_path": None,  # local working copy the CLI writes/commits to
     "repo_url": None,  # remote GitHub URL to push to
     "watch_interval_seconds": 90,
+    # Write the LeetCode problem statement to Problems/<slug>/question.md. Costs one extra
+    # API call per problem (once ever, not per sync). Set false to skip it entirely.
+    "write_question_md": True,
 }
 
 

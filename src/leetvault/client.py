@@ -7,6 +7,7 @@ exponential-backoff retries per CLAUDE.md's empirical rate-limit notes.
 
 from __future__ import annotations
 
+import json
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -94,6 +95,24 @@ class RecentAcSubmission:
 
 
 @dataclass
+class SimilarQuestion:
+    title: str
+    title_slug: str
+    difficulty: str
+
+
+@dataclass
+class QuestionDetail:
+    """Everything `question(titleSlug)` gives us, fetched in one call per problem."""
+
+    topics: list[str]
+    content: str | None  # HTML; None for paid-only problems we can't see
+    hints: list[str]  # also HTML fragments
+    is_paid_only: bool
+    similar_questions: list[SimilarQuestion]
+
+
+@dataclass
 class ProblemMeta:
     question_id: int
     frontend_id: int
@@ -166,9 +185,13 @@ query submissionDetails($submissionId: Int!) {
 }
 """
 
-_QUESTION_TOPICS_QUERY = """
+_QUESTION_DETAIL_QUERY = """
 query questionData($titleSlug: String!) {
   question(titleSlug: $titleSlug) {
+    content
+    hints
+    isPaidOnly
+    similarQuestions
     topicTags {
       name
     }
@@ -332,11 +355,38 @@ class LeetCodeClient:
             lang=lang.get("name"),
         )
 
-    def question_topics(self, title_slug: str) -> list[str]:
-        data = self.graphql(_QUESTION_TOPICS_QUERY, {"titleSlug": title_slug})
+    def question_detail(self, title_slug: str) -> QuestionDetail:
+        data = self.graphql(_QUESTION_DETAIL_QUERY, {"titleSlug": title_slug})
         question = data.get("data", {}).get("question") or {}
-        tags = question.get("topicTags") or []
-        return [tag["name"] for tag in tags]
+
+        # similarQuestions arrives as a JSON *string*, not a list (confirmed live).
+        similar: list[SimilarQuestion] = []
+        raw_similar = question.get("similarQuestions")
+        if raw_similar:
+            try:
+                for item in json.loads(raw_similar):
+                    similar.append(
+                        SimilarQuestion(
+                            title=item.get("title", ""),
+                            title_slug=item.get("titleSlug", ""),
+                            difficulty=item.get("difficulty", ""),
+                        )
+                    )
+            except (ValueError, TypeError, AttributeError):
+                pass  # malformed payload is not worth failing a sync over
+
+        return QuestionDetail(
+            topics=[tag["name"] for tag in (question.get("topicTags") or [])],
+            content=question.get("content"),
+            hints=list(question.get("hints") or []),
+            is_paid_only=bool(question.get("isPaidOnly", False)),
+            similar_questions=similar,
+        )
+
+    def question_topics(self, title_slug: str) -> list[str]:
+        """Kept for backwards compatibility; prefer `question_detail`, which is one call
+        for topics *and* the problem statement rather than two."""
+        return self.question_detail(title_slug).topics
 
     def recent_ac_submissions(self, username: str, limit: int = 20) -> list[RecentAcSubmission]:
         data = self.graphql(_RECENT_AC_SUBMISSIONS_QUERY, {"username": username, "limit": limit})

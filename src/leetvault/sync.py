@@ -26,9 +26,11 @@ from leetvault.db import (
 from leetvault.git_writer import (
     GitWriterError,
     ensure_notes,
+    question_md_path,
     sync_to_github,
     write_history,
     write_latest_and_metadata,
+    write_question_md,
 )
 from leetvault.models import Problem, Submission, SubmissionCode, Topic
 from leetvault.readme import generate_readme
@@ -55,9 +57,15 @@ def _last_kept_timestamps(session: Session) -> dict[int, int]:
 
 
 def _upsert_problem(
-    session: Session, client: LeetCodeClient, meta: ProblemMeta, console: Console
+    session: Session,
+    client: LeetCodeClient,
+    meta: ProblemMeta,
+    console: Console,
+    repo_path: Path,
+    write_question: bool,
 ) -> Problem:
     problem = session.get(Problem, meta.question_id)
+    is_new = problem is None
     if problem is None:
         problem = Problem(
             question_id=meta.question_id,
@@ -69,18 +77,34 @@ def _upsert_problem(
             url=meta.url,
         )
         session.add(problem)
-        # Topic tags aren't in REST's submissions dump or /api/problems/all/ - fetch once
-        # per newly-seen problem (not per submission) and cache in the DB forever.
-        try:
-            for topic_name in client.question_topics(meta.title_slug):
-                topic = session.scalar(select(Topic).where(Topic.name == topic_name))
-                if topic is None:
-                    topic = Topic(name=topic_name)
-                    session.add(topic)
-                    session.flush()
-                problem.topics.append(topic)
-        except Exception as exc:  # noqa: BLE001 - topics are best-effort, never fatal
-            console.print(f"[yellow]Could not fetch topics for {meta.title_slug}: {exc}[/yellow]")
+
+    # Neither topics nor the problem statement are in REST's submissions dump or
+    # /api/problems/all/, so they need one `question(titleSlug)` call. Only make it when
+    # there's something to gain: a brand-new problem (needs topics) or a missing
+    # question.md (backfills problems synced before this feature existed).
+    needs_question_md = write_question and not question_md_path(repo_path, meta.title_slug).exists()
+    if not (is_new or needs_question_md):
+        return problem
+
+    try:
+        detail = client.question_detail(meta.title_slug)
+    except Exception as exc:  # noqa: BLE001 - enrichment is best-effort, never fatal
+        console.print(f"[yellow]Could not fetch details for {meta.title_slug}: {exc}[/yellow]")
+        return problem
+
+    if is_new:
+        for topic_name in detail.topics:
+            topic = session.scalar(select(Topic).where(Topic.name == topic_name))
+            if topic is None:
+                topic = Topic(name=topic_name)
+                session.add(topic)
+                session.flush()
+            problem.topics.append(topic)
+
+    if needs_question_md:
+        topic_names = detail.topics or [t.name for t in problem.topics]
+        write_question_md(repo_path, meta, detail, topic_names)
+
     return problem
 
 
@@ -95,6 +119,7 @@ def _process_submission(
     keep_all: bool,
     dedup_window_seconds: int,
     console: Console,
+    write_question: bool = True,
 ) -> bool:
     """Store + write one accepted submission to disk. Returns True if it was kept."""
     if not sub.is_accepted:
@@ -143,7 +168,9 @@ def _process_submission(
         )
         return False
 
-    problem = _upsert_problem(session, client, meta, console)
+    problem = _upsert_problem(
+        session, client, meta, console, repo_path=repo_path, write_question=write_question
+    )
     submission = Submission(
         submission_id=sub.submission_id,
         question_id=sub.question_id,
@@ -179,6 +206,63 @@ def _process_submission(
         last_kept[sub.question_id] = sub.timestamp
 
     return True
+
+
+def _backfill_question_md(
+    console: Console,
+    factory: sessionmaker[Session],
+    client: LeetCodeClient,
+    repo_path: Path,
+) -> int:
+    """Write question.md for any already-known problem that's missing one.
+
+    Needed because `_upsert_problem` only runs while processing a *submission*, so a run
+    with no new submissions would never backfill problems synced before this feature
+    existed. Only fetches for problems whose file is actually missing, so this is a no-op
+    (zero API calls) once every problem has one.
+    """
+    with session_scope(factory) as session:
+        pending = [
+            (p.question_id, p.frontend_id, p.title, p.title_slug, p.difficulty, p.paid_only, p.url)
+            for p in session.scalars(select(Problem))
+            if not question_md_path(repo_path, p.title_slug).exists()
+        ]
+
+    if not pending:
+        return 0
+
+    written = 0
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Fetching problem statements", total=len(pending))
+        for question_id, frontend_id, title, slug, difficulty, paid_only, url in pending:
+            meta = ProblemMeta(
+                question_id=question_id,
+                frontend_id=frontend_id,
+                title=title,
+                title_slug=slug,
+                difficulty=difficulty,
+                paid_only=paid_only,
+                url=url,
+            )
+            try:
+                detail = client.question_detail(slug)
+            except Exception as exc:  # noqa: BLE001 - best-effort, never fatal
+                console.print(f"[yellow]Could not fetch statement for {slug}: {exc}[/yellow]")
+                progress.advance(task)
+                continue
+            write_question_md(repo_path, meta, detail, detail.topics)
+            written += 1
+            progress.advance(task)
+
+    if written:
+        console.print(f"[green]Wrote {written} problem statement(s)[/green] to question.md.")
+    return written
 
 
 def _regenerate_readme(factory: sessionmaker[Session], repo_path: Path) -> None:
@@ -222,6 +306,7 @@ def run_import(console: Console, site: str, keep_all: bool) -> None:
 
     store = ConfigStore()
     dedup_window = _resolve_dedup_window(store, keep_all)
+    write_question = bool(store.get("write_question_md"))
     repo_path = store.resolved_repo_path()
     repo_path.mkdir(parents=True, exist_ok=True)
 
@@ -274,6 +359,7 @@ def run_import(console: Console, site: str, keep_all: bool) -> None:
                             last_kept=last_kept,
                             keep_all=keep_all,
                             dedup_window_seconds=dedup_window,
+                            write_question=write_question,
                             console=console,
                         ):
                             stored_count += 1
@@ -289,6 +375,9 @@ def run_import(console: Console, site: str, keep_all: bool) -> None:
                 if not page.has_next or not page.submissions:
                     break
                 _sleep_between_pages()
+
+        if write_question:
+            _backfill_question_md(console, factory, client, repo_path)
 
     with session_scope(factory) as session:
         state = get_or_create_sync_state(session, site)
@@ -326,6 +415,7 @@ def run_sync(console: Console, site: str, keep_all: bool) -> None:
 
     store = ConfigStore()
     dedup_window = _resolve_dedup_window(store, keep_all)
+    write_question = bool(store.get("write_question_md"))
     repo_path = store.resolved_repo_path()
     repo_path.mkdir(parents=True, exist_ok=True)
 
@@ -385,6 +475,7 @@ def run_sync(console: Console, site: str, keep_all: bool) -> None:
                             last_kept=last_kept,
                             keep_all=keep_all,
                             dedup_window_seconds=dedup_window,
+                            write_question=write_question,
                             console=console,
                         ):
                             stored_count += 1
@@ -394,6 +485,9 @@ def run_sync(console: Console, site: str, keep_all: bool) -> None:
                     break
                 if not stop:
                     _sleep_between_pages()
+
+        if write_question:
+            _backfill_question_md(console, factory, client, repo_path)
 
     if newest_submission_id is not None:
         with session_scope(factory) as session:

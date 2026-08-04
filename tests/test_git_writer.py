@@ -5,7 +5,7 @@ import respx
 from git import GitCommandError
 from httpx import Response
 
-from leetvault.client import ProblemMeta
+from leetvault.client import ProblemMeta, QuestionDetail, SimilarQuestion
 from leetvault.git_writer import (
     GitWriterError,
     _authenticated_url,
@@ -14,11 +14,13 @@ from leetvault.git_writer import (
     ensure_repo,
     file_extension,
     push,
+    question_md_path,
     stage_and_commit,
     sync_to_github,
     validate_github_pat,
     write_history,
     write_latest_and_metadata,
+    write_question_md,
 )
 
 PROBLEM = ProblemMeta(
@@ -182,3 +184,72 @@ def test_sync_to_github_still_pushes_unpushed_commit_when_nothing_new_to_commit(
     output = console.export_text()
     assert "Nothing new to commit" in output
     assert "Pushed" in output
+
+
+def _detail(
+    content: str | None = "<p>Do the thing.</p>",
+    hints: list[str] | None = None,
+    is_paid_only: bool = False,
+    similar: list[SimilarQuestion] | None = None,
+) -> QuestionDetail:
+    return QuestionDetail(
+        topics=["Array"],
+        content=content,
+        hints=hints or [],
+        is_paid_only=is_paid_only,
+        similar_questions=similar or [],
+    )
+
+
+def test_write_question_md_renders_header_and_description(tmp_path: Path) -> None:
+    path = write_question_md(tmp_path, PROBLEM, _detail(), ["Array", "Hash Table"])
+    content = path.read_text(encoding="utf-8")
+
+    assert path.name == "question.md"
+    assert content.startswith("# 1. Two Sum")
+    assert "**Difficulty:** Easy" in content
+    assert "**Topics:** Array, Hash Table" in content
+    assert "[View on LeetCode](https://leetcode.com/problems/two-sum/)" in content
+    assert "## Description" in content
+    assert "Do the thing." in content
+    assert "<p>" not in content  # HTML was converted, not dumped
+
+
+def test_write_question_md_collapses_hints(tmp_path: Path) -> None:
+    path = write_question_md(
+        tmp_path, PROBLEM, _detail(hints=["<p>Use a <code>map</code>.</p>"]), ["Array"]
+    )
+    content = path.read_text(encoding="utf-8")
+    # Hints must be collapsed so opening the file doesn't spoil the problem.
+    assert "<details>" in content
+    assert "<summary>Hint 1</summary>" in content
+    assert "Use a `map`." in content
+
+
+def test_write_question_md_handles_paid_only(tmp_path: Path) -> None:
+    path = write_question_md(tmp_path, PROBLEM, _detail(content=None, is_paid_only=True), ["Array"])
+    content = path.read_text(encoding="utf-8")
+    assert "Premium" in content
+
+
+def test_write_question_md_lists_similar_questions(tmp_path: Path) -> None:
+    similar = [SimilarQuestion(title="3Sum", title_slug="3sum", difficulty="Medium")]
+    path = write_question_md(tmp_path, PROBLEM, _detail(similar=similar), ["Array"])
+    content = path.read_text(encoding="utf-8")
+    assert "## Similar Questions" in content
+    assert "[3Sum](https://leetcode.com/problems/3sum/) - Medium" in content
+
+
+def test_write_question_md_overwrites_on_rerun(tmp_path: Path) -> None:
+    write_question_md(tmp_path, PROBLEM, _detail(content="<p>old</p>"), ["Array"])
+    path = write_question_md(tmp_path, PROBLEM, _detail(content="<p>new</p>"), ["Array"])
+    content = path.read_text(encoding="utf-8")
+    assert "new" in content
+    assert "old" not in content
+
+
+def test_question_md_path_matches_written_location(tmp_path: Path) -> None:
+    expected = question_md_path(tmp_path, PROBLEM.title_slug)
+    actual = write_question_md(tmp_path, PROBLEM, _detail(), ["Array"])
+    assert actual == expected
+    assert expected.parent.name == "two-sum"

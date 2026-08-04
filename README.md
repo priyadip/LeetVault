@@ -88,11 +88,16 @@ disk layout per problem:
 Problems/<slug>/
   latest.<ext>          the most recent accepted submission
   history/submission_<id>.<ext>   every kept accepted submission
+  question.md            the problem statement, examples, constraints + collapsed hints
   metadata.json          difficulty, topics, runtime/memory percentiles, ...
   notes.md                yours - never overwritten once created
 README.md                 auto-generated dashboard: progress, streaks, full solutions table,
                           and clickable topic tags that jump to a per-topic problem list
 ```
+
+`question.md` is fetched once per problem and never re-fetched, so it costs nothing on
+subsequent syncs. Disable it entirely with `leetvault config write_question_md false`. Problem
+statements remain the property of LeetCode; each file notes this.
 
 Deduplicated by default within a 24h window — see [`--keep-all`](#--keep-all) above to change
 that.

@@ -5,6 +5,22 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-04
+
+### Added
+
+- Each problem folder now gets a `question.md` containing the LeetCode problem statement:
+  description, examples, constraints, collapsed hints (so opening the file doesn't spoil the
+  problem), and similar-question links. Fetched once per problem and never re-fetched.
+- Existing problems are backfilled automatically on the next `sync` - no re-import needed.
+- `leetvault config write_question_md false` disables the feature entirely.
+
+### Changed
+
+- Topics and the problem statement now come from a single `question(titleSlug)` call instead
+  of a separate topics-only query, so enabling statements costs no extra API calls for a new
+  problem.
+
 ## [0.3.0] - 2026-08-04
 
 ### Added
@@ -72,7 +88,8 @@ Initial release.
 - `watch`: polling loop with graceful shutdown and session-expiry warnings.
 - `config`: get/set persistent settings.
 
-[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/priyadip/LeetVault/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/priyadip/LeetVault/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/priyadip/LeetVault/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/priyadip/LeetVault/compare/v0.1.1...v0.1.2

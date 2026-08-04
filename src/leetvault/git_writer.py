@@ -14,7 +14,7 @@ import httpx
 from git import GitCommandError, Repo
 from rich.console import Console
 
-from leetvault.client import ProblemMeta
+from leetvault.client import ProblemMeta, QuestionDetail
 
 _LANG_EXTENSIONS: dict[str, str] = {
     "python3": "py",
@@ -108,6 +108,72 @@ def write_latest_and_metadata(
     metadata_path = p_dir / "metadata.json"
     metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
     return latest_path, metadata_path
+
+
+def question_md_path(repo_path: Path, title_slug: str) -> Path:
+    return problem_dir(repo_path, title_slug) / "question.md"
+
+
+def write_question_md(
+    repo_path: Path, problem: ProblemMeta, detail: QuestionDetail, topics: list[str]
+) -> Path:
+    """Render the problem statement as question.md alongside the solution."""
+    from leetvault.htmlmd import html_to_markdown
+
+    p_dir = problem_dir(repo_path, problem.title_slug)
+    p_dir.mkdir(parents=True, exist_ok=True)
+
+    lines: list[str] = [
+        f"# {problem.frontend_id}. {problem.title}",
+        "",
+        f"**Difficulty:** {problem.difficulty}",
+    ]
+    if topics:
+        lines.append(f"**Topics:** {', '.join(topics)}")
+    lines += ["", f"[View on LeetCode]({problem.url})", ""]
+
+    if detail.content:
+        lines += ["## Description", "", html_to_markdown(detail.content), ""]
+    elif detail.is_paid_only:
+        lines += [
+            "## Description",
+            "",
+            "_This is a LeetCode Premium problem; its statement is not available through the API._",
+            "",
+        ]
+
+    if detail.hints:
+        lines += ["## Hints", ""]
+        for i, hint in enumerate(detail.hints, start=1):
+            # Collapsed by default so opening the file doesn't spoil the problem.
+            lines += [
+                "<details>",
+                f"<summary>Hint {i}</summary>",
+                "",
+                html_to_markdown(hint),
+                "",
+                "</details>",
+                "",
+            ]
+
+    if detail.similar_questions:
+        lines += ["## Similar Questions", ""]
+        base = problem.url.split("/problems/")[0]
+        for sq in detail.similar_questions:
+            lines.append(f"- [{sq.title}]({base}/problems/{sq.title_slug}/) - {sq.difficulty}")
+        lines.append("")
+
+    lines += [
+        "---",
+        "",
+        "_Problem statement retrieved from LeetCode. All problem content is the property "
+        "of LeetCode._",
+        "",
+    ]
+
+    path = question_md_path(repo_path, problem.title_slug)
+    path.write_text("\n".join(lines), encoding="utf-8")
+    return path
 
 
 def ensure_notes(repo_path: Path, problem: ProblemMeta) -> Path:

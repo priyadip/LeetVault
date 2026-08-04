@@ -90,7 +90,17 @@ def _graphql_callback(request: httpx.Request) -> Response:
         tags = _TOPIC_TAGS.get(slug, [])
         return Response(
             200,
-            json={"data": {"question": {"topicTags": [{"name": t} for t in tags]}}},
+            json={
+                "data": {
+                    "question": {
+                        "topicTags": [{"name": t} for t in tags],
+                        "content": f"<p>Statement for {slug}.</p>",
+                        "hints": [],
+                        "isPaidOnly": False,
+                        "similarQuestions": "[]",
+                    }
+                }
+            },
         )
     raise AssertionError(f"unexpected graphql query: {query}")
 
@@ -484,3 +494,177 @@ def test_resolve_dedup_window_custom_value() -> None:
     store = ConfigStore()
     store.set("dedup_window_seconds", 3600)
     assert _resolve_dedup_window(store, keep_all=False) == 3600
+
+
+@respx.mock
+def test_run_import_writes_question_md(tmp_path: Path) -> None:
+    respx.get("https://leetcode.com/api/problems/all/").mock(
+        return_value=Response(200, json=_CATALOG_PAYLOAD)
+    )
+    respx.get("https://leetcode.com/api/submissions/").mock(
+        return_value=Response(
+            200,
+            json={
+                "submissions_dump": [
+                    _submission(100, 1, "two-sum", "Accepted", 1000, code="q1"),
+                ],
+                "has_next": False,
+                "last_key": None,
+            },
+        )
+    )
+    respx.post("https://leetcode.com/graphql").mock(side_effect=_graphql_callback)
+
+    console = Console(record=True, width=200)
+    sync.run_import(console, site="com", keep_all=False)
+
+    _, repo_path = _db_paths(tmp_path)
+    question = repo_path / "Problems" / "two-sum" / "question.md"
+    assert question.exists()
+    content = question.read_text(encoding="utf-8")
+    assert "# 1. Two Sum" in content
+    assert "Statement for two-sum." in content
+
+
+@respx.mock
+def test_sync_backfills_question_md_for_already_known_problem(tmp_path: Path) -> None:
+    """A problem synced before this feature existed has no question.md; the next sync must
+    fetch and write it, without needing a re-import."""
+    respx.get("https://leetcode.com/api/problems/all/").mock(
+        return_value=Response(200, json=_CATALOG_PAYLOAD)
+    )
+    submissions = respx.get("https://leetcode.com/api/submissions/")
+    submissions.mock(
+        return_value=Response(
+            200,
+            json={
+                "submissions_dump": [
+                    _submission(100, 1, "two-sum", "Accepted", 1000, code="q1"),
+                ],
+                "has_next": False,
+                "last_key": None,
+            },
+        )
+    )
+    respx.post("https://leetcode.com/graphql").mock(side_effect=_graphql_callback)
+
+    console = Console(record=True, width=200)
+    sync.run_import(console, site="com", keep_all=False)
+
+    _, repo_path = _db_paths(tmp_path)
+    question = repo_path / "Problems" / "two-sum" / "question.md"
+    assert question.exists()
+
+    # Simulate the pre-feature state: delete question.md but keep the problem in the DB.
+    question.unlink()
+    assert not question.exists()
+
+    submissions.mock(
+        return_value=Response(
+            200,
+            json={
+                "submissions_dump": [
+                    _submission(400, 1, "two-sum", "Accepted", 1000 + 200_000, code="q1-new"),
+                    _submission(100, 1, "two-sum", "Accepted", 1000, code="q1"),
+                ],
+                "has_next": False,
+                "last_key": None,
+            },
+        )
+    )
+    sync.run_sync(Console(record=True, width=200), site="com", keep_all=False)
+
+    assert question.exists(), "sync should backfill a missing question.md"
+    assert "Statement for two-sum." in question.read_text(encoding="utf-8")
+
+
+@respx.mock
+def test_question_md_disabled_by_config(tmp_path: Path) -> None:
+    ConfigStore().set("write_question_md", False)
+
+    respx.get("https://leetcode.com/api/problems/all/").mock(
+        return_value=Response(200, json=_CATALOG_PAYLOAD)
+    )
+    respx.get("https://leetcode.com/api/submissions/").mock(
+        return_value=Response(
+            200,
+            json={
+                "submissions_dump": [
+                    _submission(100, 1, "two-sum", "Accepted", 1000, code="q1"),
+                ],
+                "has_next": False,
+                "last_key": None,
+            },
+        )
+    )
+    respx.post("https://leetcode.com/graphql").mock(side_effect=_graphql_callback)
+
+    sync.run_import(Console(record=True, width=200), site="com", keep_all=False)
+
+    _, repo_path = _db_paths(tmp_path)
+    assert not (repo_path / "Problems" / "two-sum" / "question.md").exists()
+    # topics still get fetched and stored - only the file write is suppressed
+    assert (repo_path / "Problems" / "two-sum" / "latest.py").exists()
+
+
+@respx.mock
+def test_sync_backfills_question_md_with_no_new_submissions(tmp_path: Path) -> None:
+    """Regression test found by actually running the tool: question.md was only written
+    while processing a *submission*, so a sync with nothing new (the common case for an
+    existing user) never backfilled statements for already-known problems."""
+    respx.get("https://leetcode.com/api/problems/all/").mock(
+        return_value=Response(200, json=_CATALOG_PAYLOAD)
+    )
+    respx.get("https://leetcode.com/api/submissions/").mock(
+        return_value=Response(
+            200,
+            json={
+                "submissions_dump": [
+                    _submission(100, 1, "two-sum", "Accepted", 1000, code="q1"),
+                ],
+                "has_next": False,
+                "last_key": None,
+            },
+        )
+    )
+    respx.post("https://leetcode.com/graphql").mock(side_effect=_graphql_callback)
+
+    sync.run_import(Console(record=True, width=200), site="com", keep_all=False)
+
+    _, repo_path = _db_paths(tmp_path)
+    question = repo_path / "Problems" / "two-sum" / "question.md"
+    question.unlink()  # simulate a problem stored before this feature existed
+
+    # A sync that finds zero new submissions must still backfill it.
+    console = Console(record=True, width=200)
+    sync.run_sync(console, site="com", keep_all=False)
+
+    assert question.exists()
+    assert "Wrote 1 problem statement" in console.export_text()
+
+
+@respx.mock
+def test_backfill_is_noop_when_all_statements_present(tmp_path: Path) -> None:
+    respx.get("https://leetcode.com/api/problems/all/").mock(
+        return_value=Response(200, json=_CATALOG_PAYLOAD)
+    )
+    respx.get("https://leetcode.com/api/submissions/").mock(
+        return_value=Response(
+            200,
+            json={
+                "submissions_dump": [
+                    _submission(100, 1, "two-sum", "Accepted", 1000, code="q1"),
+                ],
+                "has_next": False,
+                "last_key": None,
+            },
+        )
+    )
+    respx.post("https://leetcode.com/graphql").mock(side_effect=_graphql_callback)
+
+    sync.run_import(Console(record=True, width=200), site="com", keep_all=False)
+
+    console = Console(record=True, width=200)
+    sync.run_sync(console, site="com", keep_all=False)
+    # nothing missing -> no fetching, no message
+    assert "problem statement" not in console.export_text()

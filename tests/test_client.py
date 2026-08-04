@@ -204,3 +204,83 @@ def test_leetcode_retry_backoff_sequence() -> None:
 def test_close_is_safe_without_context_manager() -> None:
     client = LeetCodeClient(CREDS)
     client.close()
+
+
+@respx.mock
+def test_question_detail_parses_full_shape() -> None:
+    respx.post("https://leetcode.com/graphql").mock(
+        return_value=Response(
+            200,
+            json={
+                "data": {
+                    "question": {
+                        "content": "<p>Do the thing.</p>",
+                        "hints": ["<p>Try a map.</p>"],
+                        "isPaidOnly": False,
+                        # confirmed live: this arrives as a JSON *string*, not a list
+                        "similarQuestions": (
+                            '[{"title": "3Sum", "titleSlug": "3sum", "difficulty": "Medium"}]'
+                        ),
+                        "topicTags": [{"name": "Array"}, {"name": "Hash Table"}],
+                    }
+                }
+            },
+        )
+    )
+    with LeetCodeClient(CREDS) as client:
+        detail = client.question_detail("two-sum")
+
+    assert detail.topics == ["Array", "Hash Table"]
+    assert detail.content == "<p>Do the thing.</p>"
+    assert detail.hints == ["<p>Try a map.</p>"]
+    assert detail.is_paid_only is False
+    assert len(detail.similar_questions) == 1
+    assert detail.similar_questions[0].title_slug == "3sum"
+
+
+@respx.mock
+def test_question_detail_handles_paid_only_null_content() -> None:
+    respx.post("https://leetcode.com/graphql").mock(
+        return_value=Response(
+            200,
+            json={
+                "data": {
+                    "question": {
+                        "content": None,
+                        "hints": [],
+                        "isPaidOnly": True,
+                        "similarQuestions": "[]",
+                        "topicTags": [],
+                    }
+                }
+            },
+        )
+    )
+    with LeetCodeClient(CREDS) as client:
+        detail = client.question_detail("premium-problem")
+    assert detail.content is None
+    assert detail.is_paid_only is True
+
+
+@respx.mock
+def test_question_detail_survives_malformed_similar_questions() -> None:
+    respx.post("https://leetcode.com/graphql").mock(
+        return_value=Response(
+            200,
+            json={
+                "data": {
+                    "question": {
+                        "content": "<p>x</p>",
+                        "hints": [],
+                        "isPaidOnly": False,
+                        "similarQuestions": "not-valid-json{",
+                        "topicTags": [{"name": "Array"}],
+                    }
+                }
+            },
+        )
+    )
+    with LeetCodeClient(CREDS) as client:
+        detail = client.question_detail("two-sum")
+    assert detail.similar_questions == []
+    assert detail.topics == ["Array"]  # the rest still parses
