@@ -272,6 +272,26 @@ def write_run_shim(repo_path: Path, title_slug: str) -> Path:
     return path
 
 
+_SOLUTIONS_GITIGNORE = """__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.DS_Store
+"""
+
+
+def write_solutions_gitignore(repo_path: Path) -> Path:
+    """Keep run.py's bytecode out of the solutions repo.
+
+    Running a solution creates __pycache__ next to it, which `git add -A` would otherwise
+    commit as noise on the next sync.
+    """
+    path = repo_path / ".gitignore"
+    if not path.exists():
+        path.write_text(_SOLUTIONS_GITIGNORE, encoding="utf-8")
+    return path
+
+
 def write_devcontainer(repo_path: Path) -> Path:
     """Write a devcontainer so GitHub Codespaces boots Python-ready."""
     dc_dir = repo_path / ".devcontainer"

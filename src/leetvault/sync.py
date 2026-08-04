@@ -37,6 +37,7 @@ from leetvault.git_writer import (
     write_question_md,
     write_run_shim,
     write_shared_runner,
+    write_solutions_gitignore,
 )
 from leetvault.models import Problem, Submission, SubmissionCode, Topic
 from leetvault.readme import generate_readme
@@ -241,6 +242,7 @@ def _backfill_question_md(
     # upgrade picks up runner fixes without needing to delete anything.
     write_shared_runner(repo_path)
     write_devcontainer(repo_path)
+    write_solutions_gitignore(repo_path)
 
     if not pending:
         return 0
