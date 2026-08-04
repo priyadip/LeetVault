@@ -110,6 +110,13 @@ class QuestionDetail:
     hints: list[str]  # also HTML fragments
     is_paid_only: bool
     similar_questions: list[SimilarQuestion]
+    # Signature of the method the judge calls: {"name", "params": [{"name","type"}],
+    # "return": {"type"}, "manual": bool}. `manual` marks design problems (LRU Cache etc.)
+    # that have no single entry point and so can't be driven generically.
+    meta_data: dict[str, Any]
+    # Raw example *inputs*, newline-separated, len(params) lines per case. Note this
+    # carries no expected outputs - those only exist in the prose of `content`.
+    example_testcases: str
 
 
 @dataclass
@@ -192,6 +199,8 @@ query questionData($titleSlug: String!) {
     hints
     isPaidOnly
     similarQuestions
+    metaData
+    exampleTestcases
     topicTags {
       name
     }
@@ -375,12 +384,24 @@ class LeetCodeClient:
             except (ValueError, TypeError, AttributeError):
                 pass  # malformed payload is not worth failing a sync over
 
+        meta_data: dict[str, Any] = {}
+        raw_meta = question.get("metaData")
+        if raw_meta:
+            try:
+                parsed = json.loads(raw_meta)
+                if isinstance(parsed, dict):
+                    meta_data = parsed
+            except (ValueError, TypeError):
+                pass  # malformed metadata just means "no runner", not a failed sync
+
         return QuestionDetail(
             topics=[tag["name"] for tag in (question.get("topicTags") or [])],
             content=question.get("content"),
             hints=list(question.get("hints") or []),
             is_paid_only=bool(question.get("isPaidOnly", False)),
             similar_questions=similar,
+            meta_data=meta_data,
+            example_testcases=question.get("exampleTestcases") or "",
         )
 
     def question_topics(self, title_slug: str) -> list[str]:

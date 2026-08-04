@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -15,12 +16,17 @@ from leetvault.git_writer import (
     file_extension,
     push,
     question_md_path,
+    runner_info_from_meta,
     stage_and_commit,
     sync_to_github,
+    update_metadata_runner,
     validate_github_pat,
+    write_devcontainer,
     write_history,
     write_latest_and_metadata,
     write_question_md,
+    write_run_shim,
+    write_shared_runner,
 )
 
 PROBLEM = ProblemMeta(
@@ -198,6 +204,8 @@ def _detail(
         hints=hints or [],
         is_paid_only=is_paid_only,
         similar_questions=similar or [],
+        meta_data={},
+        example_testcases="",
     )
 
 
@@ -253,3 +261,76 @@ def test_question_md_path_matches_written_location(tmp_path: Path) -> None:
     actual = write_question_md(tmp_path, PROBLEM, _detail(), ["Array"])
     assert actual == expected
     assert expected.parent.name == "two-sum"
+
+
+def test_runner_info_from_meta_extracts_signature() -> None:
+    detail = _detail()
+    detail.meta_data = {
+        "name": "twoSum",
+        "params": [{"name": "nums", "type": "integer[]"}, {"name": "target", "type": "integer"}],
+        "return": {"type": "integer[]"},
+        "manual": False,
+    }
+    detail.example_testcases = "[2,7,11,15]\n9"
+    info = runner_info_from_meta(detail)
+    assert info["method"] == "twoSum"
+    assert info["param_types"] == ["integer[]", "integer"]
+    assert info["example_testcases"] == "[2,7,11,15]\n9"
+
+
+def test_runner_info_marks_manual_problems_undrivable() -> None:
+    # Design problems (LRU Cache etc.) have no single entry point; the runner must be told
+    # so it can explain that rather than fail confusingly.
+    detail = _detail()
+    detail.meta_data = {"name": "LRUCache", "params": [], "manual": True}
+    info = runner_info_from_meta(detail)
+    assert info["method"] is None
+
+
+def test_write_latest_and_metadata_preserves_existing_runner(tmp_path: Path) -> None:
+    """runner info is only known when the statement is fetched (once per problem), so a
+    later submission-only write must not wipe it."""
+    write_latest_and_metadata(
+        tmp_path,
+        PROBLEM,
+        1,
+        "python3",
+        "print(1)",
+        1000,
+        "10 ms",
+        "5 MB",
+        None,
+        None,
+        runner={"method": "twoSum", "param_types": ["integer[]"], "example_testcases": "[1]"},
+    )
+    # a subsequent write with runner=None (the normal per-submission path)
+    _, metadata_path = write_latest_and_metadata(
+        tmp_path, PROBLEM, 2, "python3", "print(2)", 2000, "9 ms", "5 MB", None, None
+    )
+    stored = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert stored["runner"]["method"] == "twoSum"
+
+
+def test_update_metadata_runner_requires_existing_file(tmp_path: Path) -> None:
+    assert update_metadata_runner(tmp_path, "two-sum", {"method": "x"}) is False
+
+
+def test_write_run_shim_and_shared_runner(tmp_path: Path) -> None:
+    shim = write_run_shim(tmp_path, "two-sum")
+    assert shim.name == "run.py"
+    assert "leetvault_runner" in shim.read_text(encoding="utf-8")
+
+    runner = write_shared_runner(tmp_path)
+    assert runner.name == "leetvault_runner.py"
+    body = runner.read_text(encoding="utf-8")
+    # The judge preloads these, so stored solutions use them without importing.
+    assert "_build_namespace" in body
+    assert "class ListNode" in body
+    assert "class TreeNode" in body
+
+
+def test_write_devcontainer(tmp_path: Path) -> None:
+    path = write_devcontainer(tmp_path)
+    assert path.parent.name == ".devcontainer"
+    config = json.loads(path.read_text(encoding="utf-8"))
+    assert "python" in config["image"]

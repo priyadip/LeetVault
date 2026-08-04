@@ -5,6 +5,27 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-04
+
+### Added
+
+- Every problem folder now gets a `run.py` that executes your stored solution against that
+  problem's own example inputs and prints the results. It deliberately does not assert
+  pass/fail: LeetCode's API exposes example *inputs* but not expected outputs, so a verdict
+  would be guesswork - compare against the `Output:` lines in `question.md`.
+- A `.devcontainer/` so the repo opens in GitHub Codespaces with Python ready, letting you
+  edit and run any solution from the browser.
+- A shared `leetvault_runner.py` at the repo root, which each `run.py` delegates to.
+
+### Notes
+
+- The runner rebuilds the namespace LeetCode's judge preloads (`List`, `gcd`, `bisect`,
+  `Counter`, `inf`, `ListNode`/`TreeNode`, ...), because stored solutions routinely use those
+  names with no import and would otherwise raise `NameError`.
+- Problems whose inputs aren't plain JSON (linked lists, trees) or that have no single entry
+  point (design problems) are refused with an explanation rather than run incorrectly.
+  Verified against a real 48-problem repo: 47 run, 1 refuses cleanly, 0 errors.
+
 ## [0.4.0] - 2026-08-04
 
 ### Added
@@ -88,7 +109,8 @@ Initial release.
 - `watch`: polling loop with graceful shutdown and session-expiry warnings.
 - `config`: get/set persistent settings.
 
-[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/priyadip/LeetVault/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/priyadip/LeetVault/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/priyadip/LeetVault/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/priyadip/LeetVault/compare/v0.1.2...v0.2.0

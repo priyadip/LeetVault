@@ -89,11 +89,29 @@ Problems/<slug>/
   latest.<ext>          the most recent accepted submission
   history/submission_<id>.<ext>   every kept accepted submission
   question.md            the problem statement, examples, constraints + collapsed hints
+  run.py                  runs your solution against the problem's example inputs
   metadata.json          difficulty, topics, runtime/memory percentiles, ...
   notes.md                yours - never overwritten once created
+leetvault_runner.py       shared runner that each run.py delegates to
+.devcontainer/            so the repo opens ready-to-run in GitHub Codespaces
 README.md                 auto-generated dashboard: progress, streaks, full solutions table,
                           and clickable topic tags that jump to a per-topic problem list
 ```
+
+### Running solutions in the browser
+
+Open your solutions repo on GitHub and choose **Code ▸ Codespaces ▸ Create codespace** - you
+get full VS Code with a terminal, and the devcontainer means Python is already set up:
+
+```bash
+python Problems/two-sum/run.py
+```
+
+It prints your solution's output for each of LeetCode's example inputs. It intentionally does
+*not* report pass/fail: the API exposes example inputs but not their expected outputs, so any
+verdict would be guesswork - check the `Output:` lines in that problem's `question.md`.
+Problems needing non-JSON inputs (linked lists, trees) or with no single entry point (design
+problems) say so rather than running incorrectly.
 
 `question.md` is fetched once per problem and never re-fetched, so it costs nothing on
 subsequent syncs. Disable it entirely with `leetvault config write_question_md false`. Problem

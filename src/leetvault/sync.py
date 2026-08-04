@@ -26,11 +26,17 @@ from leetvault.db import (
 from leetvault.git_writer import (
     GitWriterError,
     ensure_notes,
+    problem_dir,
     question_md_path,
+    runner_info_from_meta,
     sync_to_github,
+    update_metadata_runner,
+    write_devcontainer,
     write_history,
     write_latest_and_metadata,
     write_question_md,
+    write_run_shim,
+    write_shared_runner,
 )
 from leetvault.models import Problem, Submission, SubmissionCode, Topic
 from leetvault.readme import generate_readme
@@ -104,6 +110,8 @@ def _upsert_problem(
     if needs_question_md:
         topic_names = detail.topics or [t.name for t in problem.topics]
         write_question_md(repo_path, meta, detail, topic_names)
+        update_metadata_runner(repo_path, meta.title_slug, runner_info_from_meta(detail))
+        write_run_shim(repo_path, meta.title_slug)
 
     return problem
 
@@ -226,7 +234,13 @@ def _backfill_question_md(
             (p.question_id, p.frontend_id, p.title, p.title_slug, p.difficulty, p.paid_only, p.url)
             for p in session.scalars(select(Problem))
             if not question_md_path(repo_path, p.title_slug).exists()
+            or not (problem_dir(repo_path, p.title_slug) / "run.py").exists()
         ]
+
+    # The shared runner and devcontainer are repo-level and cheap; keep them current so an
+    # upgrade picks up runner fixes without needing to delete anything.
+    write_shared_runner(repo_path)
+    write_devcontainer(repo_path)
 
     if not pending:
         return 0
@@ -257,11 +271,15 @@ def _backfill_question_md(
                 progress.advance(task)
                 continue
             write_question_md(repo_path, meta, detail, detail.topics)
+            update_metadata_runner(repo_path, slug, runner_info_from_meta(detail))
+            write_run_shim(repo_path, slug)
             written += 1
             progress.advance(task)
 
     if written:
-        console.print(f"[green]Wrote {written} problem statement(s)[/green] to question.md.")
+        console.print(
+            f"[green]Wrote {written} problem statement(s)[/green] (question.md + runnable run.py)."
+        )
     return written
 
 
