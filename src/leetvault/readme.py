@@ -68,6 +68,7 @@ class SolutionEntry:
     url: str
     file_path: str
     file_name: str
+    question_path: str
 
 
 @dataclass
@@ -109,6 +110,7 @@ def _to_entry(problem: Problem, submission: Submission) -> SolutionEntry:
         url=problem.url,
         file_path=f"Problems/{problem.title_slug}/latest.{ext}",
         file_name=f"latest.{ext}",
+        question_path=f"Problems/{problem.title_slug}/question.md",
     )
 
 

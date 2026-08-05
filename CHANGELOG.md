@@ -5,6 +5,13 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-08-04
+
+### Added
+
+- A **Question** column in the README's All Solutions and per-topic tables, linking to each
+  problem's `question.md` alongside the existing solution link.
+
 ## [0.7.0] - 2026-08-04
 
 ### Added
@@ -141,7 +148,8 @@ Initial release.
 - `watch`: polling loop with graceful shutdown and session-expiry warnings.
 - `config`: get/set persistent settings.
 
-[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/priyadip/LeetVault/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/priyadip/LeetVault/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/priyadip/LeetVault/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/priyadip/LeetVault/compare/v0.4.0...v0.5.0

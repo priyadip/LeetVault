@@ -216,3 +216,50 @@ def test_generate_readme_renders_clickable_topics_and_per_topic_sections(
     assert "### Array" in content
     assert "[back to topics](#topics)" in content
     assert content.count("Two Sum") >= 2  # once in All Solutions, once under its topic
+
+
+def test_readme_links_question_md_alongside_solution(tmp_path: Path) -> None:
+    """Each row should offer both the problem statement and the solution."""
+    engine = make_engine(tmp_path / "leetvault.db")
+    factory = make_session_factory(engine)
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+
+    with session_scope(factory) as session:
+        p1 = _make_problem(1, 1, "two-sum", "Easy", topics=["Array"])
+        p1.submissions = [_make_submission(100, 1, "python3", 1000)]
+        session.add(p1)
+
+    with session_scope(factory) as session:
+        content = generate_readme(session, repo_path).read_text(encoding="utf-8")
+
+    assert "[question](Problems/two-sum/question.md)" in content
+    assert "[latest.py](Problems/two-sum/latest.py)" in content
+    # both the All Solutions table and the per-topic table carry the column
+    assert content.count("[question](Problems/two-sum/question.md)") == 2
+    assert "| # | Problem | Difficulty | Language | Date | Question | Solution |" in content
+    assert "| # | Problem | Difficulty | Question | Solution |" in content
+
+
+def test_readme_table_separator_matches_column_count(tmp_path: Path) -> None:
+    """A mismatched separator row silently breaks Markdown table rendering on GitHub."""
+    engine = make_engine(tmp_path / "leetvault.db")
+    factory = make_session_factory(engine)
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+
+    with session_scope(factory) as session:
+        p1 = _make_problem(1, 1, "two-sum", "Easy", topics=["Array"])
+        p1.submissions = [_make_submission(100, 1, "python3", 1000)]
+        session.add(p1)
+
+    with session_scope(factory) as session:
+        content = generate_readme(session, repo_path).read_text(encoding="utf-8")
+
+    lines = content.splitlines()
+    for i, line in enumerate(lines):
+        if not line.startswith("|") or set(line.replace("|", "").strip()) != {"-", " "}:
+            continue
+        header_cols = len(lines[i - 1].split("|"))
+        sep_cols = len(line.split("|"))
+        assert sep_cols == header_cols, f"line {i}: separator has {sep_cols}, header {header_cols}"
