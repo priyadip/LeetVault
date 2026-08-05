@@ -49,6 +49,9 @@ from leetvault.readme import generate_readme
 
 _PAGE_LIMIT = 20
 _PAGE_DELAY_RANGE = (0.3, 0.5)
+# Consecutive AI failures tolerated before giving up on the whole batch. A dead backend
+# fails the same way every time, so a few attempts is enough to prove it.
+_AI_FAILURE_LIMIT = 3
 
 
 def _sleep_between_pages() -> None:
@@ -511,6 +514,9 @@ def _generate_ai_analysis(console: Console, factory: sessionmaker[Session], repo
     )
 
     written = 0
+    failed = 0
+    aborted = False
+    last_error: str | None = None
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -546,10 +552,32 @@ def _generate_ai_analysis(console: Console, factory: sessionmaker[Session], repo
             if body:
                 write_analysis_md(repo_path, meta, body, str(provider_name), provider.model)
                 written += 1
+            else:
+                failed += 1
+                last_error = provider.last_error or last_error
+                # One backend that is down fails identically for every problem. Stop after a
+                # short run of failures rather than spending 50 doomed requests to print the
+                # same message - and rather than finishing with a full progress bar and no
+                # files, which is what a silent None looks like to the user.
+                if written == 0 and failed >= _AI_FAILURE_LIMIT:
+                    aborted = True
+                    break
             progress.advance(task)
 
     if written:
         console.print(f"[green]Wrote {written} analysis file(s).[/green]")
+    if failed:
+        console.print(
+            f"[yellow]{failed} problem(s) produced no analysis"
+            + (" - stopped early." if aborted else ".")
+            + "[/yellow]"
+        )
+        if last_error:
+            console.print(f"  [dim]{provider_name}:[/dim] {last_error}")
+        console.print(
+            "  Check the backend with [bold]leetvault ai --show[/bold], "
+            "or switch with [bold]leetvault ai[/bold]."
+        )
     return written
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import httpx
 import pytest
 import respx
 from httpx import Response
@@ -301,7 +302,7 @@ def test_gemini_detected_from_keyring() -> None:
 def test_gemini_generate_parses_response(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GEMINI_API_KEY", "free-key")
     respx.post(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
     ).mock(
         return_value=Response(
             200,
@@ -315,7 +316,7 @@ def test_gemini_generate_parses_response(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_gemini_generate_returns_none_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GEMINI_API_KEY", "free-key")
     respx.post(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
     ).mock(return_value=Response(429, json={}))
     assert GeminiProvider().generate("analyse") is None
 
@@ -403,3 +404,32 @@ def test_setup_lists_free_cloud_options_when_nothing_installed() -> None:
     output = console.export_text()
     assert "aistudio.google.com" in output
     assert "console.groq.com" in output
+
+
+def test_provider_records_api_error_message() -> None:
+    """A silent None gave the user a full progress bar and no files. The API's own message
+    explains the real cause - a zero free-tier quota, a retired model - so keep it."""
+    provider = GeminiProvider()
+    response = httpx.Response(
+        429,
+        json={"error": {"message": "Quota exceeded for metric: ...\nlimit: 0"}},
+        request=httpx.Request("POST", "https://example.invalid"),
+    )
+    provider._fail(httpx.HTTPStatusError("429", request=response.request, response=response))
+    assert provider.last_error is not None
+    assert provider.last_error.startswith("HTTP 429: Quota exceeded")
+
+
+def test_provider_fail_survives_non_json_body() -> None:
+    provider = GeminiProvider()
+    response = httpx.Response(
+        502, text="<html>bad gateway</html>", request=httpx.Request("POST", "https://x.invalid")
+    )
+    provider._fail(httpx.HTTPStatusError("502", request=response.request, response=response))
+    assert provider.last_error == "HTTP 502"
+
+
+def test_gemini_default_model_is_an_alias() -> None:
+    """Pinned Gemini names get retired or dropped to a zero free-tier quota; the alias
+    tracks whatever Google actually serves."""
+    assert GeminiProvider.default_model == "gemini-flash-latest"

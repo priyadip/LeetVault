@@ -6,7 +6,9 @@ configured at all. Forcing one backend would make the feature unusable for most 
 each backend is optional and the feature stays off until one is both available and chosen.
 
 Every provider is best-effort by contract: `generate` returns None rather than raising, so a
-failing model never breaks a sync.
+failing model never breaks a sync. It must still say *why* it failed - a silent None gives
+the user a completed progress bar and no files, which is indistinguishable from the feature
+not working at all. Failures are recorded on `last_error` for the caller to surface.
 """
 
 from __future__ import annotations
@@ -42,6 +44,7 @@ class AIProvider(ABC):
 
     def __init__(self, model: str | None = None) -> None:
         self.model = model or self.default_model
+        self.last_error: str | None = None
 
     @classmethod
     @abstractmethod
@@ -50,7 +53,32 @@ class AIProvider(ABC):
 
     @abstractmethod
     def generate(self, user_prompt: str) -> str | None:
-        """Return the analysis, or None if generation failed."""
+        """Return the analysis, or None if generation failed (see `last_error`)."""
+
+    def _fail(self, exc: Exception) -> None:
+        """Record why generation failed, preferring the API's own message.
+
+        Providers return an error body that explains the real problem - a quota of zero, a
+        retired model - while the raised exception says only "400" or "429". Digging the
+        message out is the difference between a fixable report and a shrug.
+        """
+        detail = str(exc)
+        if isinstance(exc, httpx.HTTPStatusError):
+            try:
+                payload = exc.response.json()
+            except Exception:  # noqa: BLE001 - error bodies are not always JSON
+                payload = None
+            message = ""
+            if isinstance(payload, dict):
+                err = payload.get("error")
+                if isinstance(err, dict):
+                    message = str(err.get("message") or "")
+                elif isinstance(err, str):
+                    message = err
+            detail = f"HTTP {exc.response.status_code}"
+            if message:
+                detail += f": {message.strip().splitlines()[0]}"
+        self.last_error = detail
 
 
 class OllamaProvider(AIProvider):
@@ -90,7 +118,8 @@ class OllamaProvider(AIProvider):
             )
             response.raise_for_status()
             content = response.json().get("message", {}).get("content")
-        except Exception:  # noqa: BLE001 - best-effort
+        except Exception as exc:  # noqa: BLE001 - best-effort, but recorded
+            self._fail(exc)
             return None
         return content.strip() if content else None
 
@@ -132,9 +161,14 @@ class ClaudeCliProvider(AIProvider):
             result = subprocess.run(  # noqa: S603 - executable resolved via shutil.which
                 command, capture_output=True, text=True, timeout=_TIMEOUT, check=False
             )
-        except Exception:  # noqa: BLE001 - best-effort
+        except Exception as exc:  # noqa: BLE001 - best-effort, but recorded
+            self._fail(exc)
             return None
         if result.returncode != 0:
+            stderr = (result.stderr or "").strip().splitlines()
+            self.last_error = f"claude exited {result.returncode}" + (
+                f": {stderr[-1]}" if stderr else ""
+            )
             return None
         return result.stdout.strip() or None
 
@@ -177,7 +211,8 @@ class AnthropicProvider(AIProvider):
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_prompt}],
             )
-        except Exception:  # noqa: BLE001 - best-effort
+        except Exception as exc:  # noqa: BLE001 - best-effort, but recorded
+            self._fail(exc)
             return None
         return "".join(b.text for b in message.content if b.type == "text").strip() or None
 
@@ -190,7 +225,7 @@ class GeminiProvider(AIProvider):
     """
 
     name = "gemini"
-    default_model = "gemini-2.0-flash"
+    default_model = "gemini-flash-latest"
     key_env = "GEMINI_API_KEY"
 
     @classmethod
@@ -229,7 +264,8 @@ class GeminiProvider(AIProvider):
             candidates = response.json().get("candidates") or []
             parts = candidates[0]["content"]["parts"] if candidates else []
             text = "".join(p.get("text", "") for p in parts)
-        except Exception:  # noqa: BLE001 - best-effort
+        except Exception as exc:  # noqa: BLE001 - best-effort, but recorded
+            self._fail(exc)
             return None
         return text.strip() or None
 
@@ -278,7 +314,8 @@ class GroqProvider(AIProvider):
             response.raise_for_status()
             choices = response.json().get("choices") or []
             content = choices[0]["message"]["content"] if choices else None
-        except Exception:  # noqa: BLE001 - best-effort
+        except Exception as exc:  # noqa: BLE001 - best-effort, but recorded
+            self._fail(exc)
             return None
         return content.strip() if content else None
 
