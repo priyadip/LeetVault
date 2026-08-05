@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-08-05
+
 ### Added
 
 - An **Analysis** column in the README tables, linking each problem to its `analysis.md`.
