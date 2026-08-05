@@ -25,8 +25,10 @@ All notable changes to this project are documented here. Format follows
 ### Notes
 
 - The prompt is adapted from [leetcode-helper](https://github.com/amanattar/leetcode-helper)
-  by Aman Attar under the MIT License. The original copyright notice is retained in
-  NOTICE.md and in the footer of every generated file, as the licence requires.
+  by Aman Attar under the MIT License. The copyright notice is retained in NOTICE.md, which
+  ships with the package - that is what the licence requires. Generated `analysis.md` files
+  are output rather than copies of the prompt, so they carry no third-party notice; their
+  footer records only the provider and model used.
 - Generation is best-effort: a provider returns `None` rather than raising, so a slow or
   failing model can never break a sync.
 

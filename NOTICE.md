@@ -41,4 +41,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-Each generated `analysis.md` also carries this attribution in its footer.
+This notice ships with the package, which is what the MIT licence requires. Files that
+leetvault *generates* are output rather than copies of the prompt, so they carry no
+third-party notice.

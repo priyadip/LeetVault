@@ -165,16 +165,32 @@ def test_build_user_prompt_handles_missing_statement() -> None:
     assert "unknown" in prompt  # topics
 
 
-def test_write_analysis_md_keeps_attribution(tmp_path: Path) -> None:
+def test_write_analysis_md_renders_body_and_provider(tmp_path: Path) -> None:
     path = write_analysis_md(tmp_path, PROBLEM, "## Approach\nHash map.", "ollama", "qwen2.5")
     content = path.read_text(encoding="utf-8")
     assert path.name == "analysis.md"
     assert content.startswith("# 1. Two Sum - Solution Analysis")
     assert "Hash map." in content
-    # MIT requires the notice be retained - it ships in every generated file.
-    assert "leetcode-helper" in content
-    assert "Aman Attar" in content
-    assert "MIT" in content
+    assert "ollama" in content and "qwen2.5" in content
+
+
+def test_generated_files_carry_no_third_party_notice(tmp_path: Path) -> None:
+    """Generated files are output, not copies of the prompt. MIT's notice requirement is
+    satisfied by NOTICE.md shipping with the package, so output stays clean."""
+    content = write_analysis_md(
+        tmp_path, PROBLEM, "## Approach\nHash map.", "ollama", "qwen2.5"
+    ).read_text(encoding="utf-8")
+    assert "leetcode-helper" not in content
+    assert "Aman Attar" not in content
+
+
+def test_package_ships_the_required_notice() -> None:
+    """The licence obligation lives here - assert it can't be dropped silently."""
+    notice = Path(__file__).resolve().parents[1] / "NOTICE.md"
+    text = notice.read_text(encoding="utf-8")
+    assert "leetcode-helper" in text
+    assert "Aman Attar" in text
+    assert "MIT" in text
 
 
 def test_write_analysis_md_never_touches_notes(tmp_path: Path) -> None:
