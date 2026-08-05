@@ -1,23 +1,16 @@
 """The prompt used to generate per-problem solution analysis.
 
-Adapted from **leetcode-helper** by Aman Attar (https://github.com/amanattar/leetcode-helper),
-used under the MIT License. The original is a Claude/Codex skill that guides an agent to
-*solve* an interview problem end to end. leetvault's situation is different - the solution
-already exists and is the user's own - so the seven-part structure (problem understanding,
-approach, algorithm, code, line-by-line explanation, dry run, complexity and edge cases) is
-retained but re-pointed at explaining and critiquing existing code rather than writing new
-code.
-
-The original MIT copyright notice is preserved in NOTICE.md at the repository root, as the
-licence requires.
+The section order below - problem understanding, approach, algorithm, line-by-line
+explanation, dry run, complexity, edge cases - is the conventional shape of an algorithm
+write-up rather than anything specific to this project. What is specific is the framing:
+most interview-prep prompts ask a model to *solve* a problem, whereas here the solution
+already exists, was accepted by the judge, and belongs to the user. So the model is told to
+explain and critique code it did not write, quote the real lines, and say so when an
+accepted solution is nonetheless fragile - the one thing a passing test suite cannot tell
+the user.
 """
 
 from __future__ import annotations
-
-ATTRIBUTION = (
-    "Prompt adapted from [leetcode-helper](https://github.com/amanattar/leetcode-helper) "
-    "by Aman Attar (MIT License)."
-)
 
 SYSTEM_PROMPT = """You are an expert coding-interview mentor reviewing a solution the user \
 has already written and had accepted by LeetCode's judge.

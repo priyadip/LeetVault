@@ -4,7 +4,7 @@ Off by default. Enabled only when the user picks an available backend, so instal
 leetvault never implies an API bill or a model download.
 """
 
-from leetvault.ai.prompt import ATTRIBUTION, build_user_prompt
+from leetvault.ai.prompt import build_user_prompt
 from leetvault.ai.providers import (
     AIProvider,
     ProviderInfo,
@@ -14,7 +14,6 @@ from leetvault.ai.providers import (
 )
 
 __all__ = [
-    "ATTRIBUTION",
     "AIProvider",
     "ProviderInfo",
     "available_providers",

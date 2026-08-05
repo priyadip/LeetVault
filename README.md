@@ -176,5 +176,3 @@ that.
 ## License
 
 MIT — see [LICENSE](LICENSE).
-
-The AI analysis prompt is adapted from [leetcode-helper](https://github.com/amanattar/leetcode-helper) by Aman Attar (MIT) — see [NOTICE.md](NOTICE.md).
