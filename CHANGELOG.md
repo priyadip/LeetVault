@@ -5,6 +5,19 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-08-05
+
+### Fixed
+
+- AI analysis failures are now reported instead of passing silently. A sync could announce
+  "Generating AI analysis for 50 problem(s)", complete its progress bar, and write nothing
+  at all with no explanation, which looked exactly like the feature not working. Providers
+  record why a generation failed and `sync` prints it, giving up after three consecutive
+  failures rather than issuing dozens of doomed requests.
+- The default Gemini model is now `gemini-flash-latest`. The previous pinned
+  `gemini-2.0-flash` returns HTTP 429 with a free-tier quota of zero, and other pinned names
+  are retired for new users; the alias tracks whatever the free tier actually serves.
+
 ## [0.8.0] - 2026-08-05
 
 ### Added
