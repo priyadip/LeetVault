@@ -38,6 +38,7 @@ leetvault watch                                             # or: poll automatic
 - `leetvault status` — show session validity/expiry and sync state.
 - `leetvault logout` — remove stored credentials.
 - `leetvault config` — get/set persistent configuration (repo URL, DB path, dedup window, ...).
+- `leetvault ai` — set up optional AI-generated solution analysis (**off by default**).
 
 ### Refreshing credentials
 
@@ -54,6 +55,30 @@ leetvault login --force    # re-prompt for everything, even if still valid
 
 If both are still good, `login` prompts for nothing and tells you so. `leetvault status` shows
 the same live check without changing anything.
+
+### AI solution analysis (optional, off by default)
+
+`leetvault ai` can generate an `analysis.md` next to each solution — explaining the approach,
+walking through your actual code, and covering complexity and edge cases. It is **disabled
+until you turn it on**, and your `notes.md` is never touched.
+
+It works with whichever backend you already have; run `leetvault ai` and it detects them:
+
+| Backend | Cost | Notes |
+|---|---|---|
+| **Ollama** (local) | Free, unlimited | `ollama pull qwen2.5-coder:7b`. Runs offline; no account. Slow without a GPU. |
+| **Claude Code CLI** | Free with an existing Claude subscription | `npm i -g @anthropic-ai/claude-code`, then `claude` once to sign in. |
+| **Anthropic API** | Paid, per token | `pip install anthropic` + an API key. Highest quality. |
+
+```bash
+leetvault ai              # detect backends and choose one
+leetvault ai --show       # print current settings
+leetvault ai --disable    # turn it back off
+leetvault config ai_model qwen2.5-coder:14b   # override the model
+```
+
+Generation is best-effort — a failing or slow model never breaks a sync, and analysis is
+written once per problem, never regenerated.
 
 ### `--keep-all`
 
@@ -89,6 +114,7 @@ Problems/<slug>/
   latest.<ext>          the most recent accepted submission
   history/submission_<id>.<ext>   every kept accepted submission
   question.md            the problem statement, examples, constraints + collapsed hints
+  analysis.md            optional AI explanation of your solution (off by default)
   run.py                  runs your solution against the problem's example inputs
   metadata.json          difficulty, topics, runtime/memory percentiles, ...
   notes.md                yours - never overwritten once created
@@ -144,3 +170,5 @@ that.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+The AI analysis prompt is adapted from [leetcode-helper](https://github.com/amanattar/leetcode-helper) by Aman Attar (MIT) — see [NOTICE.md](NOTICE.md).

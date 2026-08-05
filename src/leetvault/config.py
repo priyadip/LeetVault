@@ -52,6 +52,11 @@ DEFAULTS: dict[str, Any] = {
     # Write the LeetCode problem statement to Problems/<slug>/question.md. Costs one extra
     # API call per problem (once ever, not per sync). Set false to skip it entirely.
     "write_question_md": True,
+    # AI-generated analysis.md. Off unless the user opts in and picks an available
+    # backend - installing leetvault must never imply an API bill or model download.
+    "ai_notes_enabled": False,
+    "ai_provider": None,  # "ollama" | "claude-cli" | "anthropic"
+    "ai_model": None,  # None = that provider's own default
 }
 
 

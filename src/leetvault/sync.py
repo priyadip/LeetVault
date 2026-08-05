@@ -26,6 +26,7 @@ from leetvault.db import (
 )
 from leetvault.git_writer import (
     GitWriterError,
+    analysis_md_path,
     ensure_notes,
     problem_dir,
     question_md_path,
@@ -34,6 +35,7 @@ from leetvault.git_writer import (
     update_metadata_counts,
     update_metadata_failed_cases,
     update_metadata_runner,
+    write_analysis_md,
     write_devcontainer,
     write_history,
     write_latest_and_metadata,
@@ -462,6 +464,111 @@ def _backfill_question_md(
     return written
 
 
+def _generate_ai_analysis(console: Console, factory: sessionmaker[Session], repo_path: Path) -> int:
+    """Write analysis.md for problems missing one, using the configured AI backend.
+
+    Opt-in and best-effort: disabled by default, skipped entirely when no backend is
+    configured, and a failing model never breaks the sync.
+    """
+    store = ConfigStore()
+    if not store.get("ai_notes_enabled"):
+        return 0
+
+    provider_name = store.get("ai_provider")
+    if not provider_name:
+        return 0
+
+    from leetvault.ai import build_user_prompt, get_provider
+
+    provider = get_provider(str(provider_name), store.get("ai_model"))
+    if provider is None:
+        console.print(f"[yellow]Unknown AI provider {provider_name!r}; skipping.[/yellow]")
+        return 0
+
+    with session_scope(factory) as session:
+        pending = [
+            (
+                p.question_id,
+                p.frontend_id,
+                p.title,
+                p.title_slug,
+                p.difficulty,
+                p.paid_only,
+                p.url,
+                [t.name for t in p.topics],
+            )
+            for p in session.scalars(select(Problem))
+            if not analysis_md_path(repo_path, p.title_slug).exists()
+        ]
+
+    if not pending:
+        return 0
+
+    console.print(
+        f"[bold]Generating AI analysis[/bold] for {len(pending)} problem(s) "
+        f"via {provider_name}. This can be slow on a local model - Ctrl+C is safe, "
+        "progress is kept."
+    )
+
+    written = 0
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TimeElapsedColumn(),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Analysing solutions", total=len(pending))
+        for qid, frontend_id, title, slug, difficulty, paid_only, url, topics in pending:
+            meta = ProblemMeta(
+                question_id=qid,
+                frontend_id=frontend_id,
+                title=title,
+                title_slug=slug,
+                difficulty=difficulty,
+                paid_only=paid_only,
+                url=url,
+            )
+            solution = _latest_solution_source(factory, qid)
+            if solution is None:
+                progress.advance(task)
+                continue
+            lang, code = solution
+
+            statement = ""
+            q_path = question_md_path(repo_path, slug)
+            if q_path.exists():
+                statement = q_path.read_text(encoding="utf-8")
+
+            body = provider.generate(
+                build_user_prompt(title, difficulty, topics, statement, lang, code)
+            )
+            if body:
+                write_analysis_md(repo_path, meta, body, str(provider_name), provider.model)
+                written += 1
+            progress.advance(task)
+
+    if written:
+        console.print(f"[green]Wrote {written} analysis file(s).[/green]")
+    return written
+
+
+def _latest_solution_source(
+    factory: sessionmaker[Session], question_id: int
+) -> tuple[str, str] | None:
+    """The newest accepted submission's language and source for one problem."""
+    with session_scope(factory) as session:
+        submission = session.scalar(
+            select(Submission)
+            .where(Submission.question_id == question_id)
+            .order_by(Submission.timestamp.desc())
+            .limit(1)
+        )
+        if submission is None or submission.code is None:
+            return None
+        return submission.lang, submission.code.code
+
+
 def _regenerate_readme(factory: sessionmaker[Session], repo_path: Path) -> None:
     with session_scope(factory) as session:
         generate_readme(session, repo_path)
@@ -578,6 +685,7 @@ def run_import(console: Console, site: str, keep_all: bool) -> None:
         _backfill_testcase_counts(console, factory, client, repo_path)
         _scan_history_for_failures(console, factory, client, site)
         _write_failed_testcases(factory, repo_path)
+    _generate_ai_analysis(console, factory, repo_path)
 
     with session_scope(factory) as session:
         state = get_or_create_sync_state(session, site)
@@ -691,6 +799,7 @@ def run_sync(console: Console, site: str, keep_all: bool) -> None:
         _backfill_testcase_counts(console, factory, client, repo_path)
         _scan_history_for_failures(console, factory, client, site)
         _write_failed_testcases(factory, repo_path)
+    _generate_ai_analysis(console, factory, repo_path)
 
     if newest_submission_id is not None:
         with session_scope(factory) as session:

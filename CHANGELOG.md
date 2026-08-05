@@ -5,6 +5,27 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-05
+
+### Added
+
+- `leetvault ai` — optional AI-generated `analysis.md` per problem, explaining the approach,
+  walking through your actual code, and covering complexity and edge cases. **Off by
+  default**; nothing is downloaded, enabled, or billed unless you choose it.
+- Pluggable backends so the feature works whatever a user already has: **Ollama** (free,
+  local, unlimited), the **Claude Code CLI** (free with an existing Claude subscription), or
+  the **Anthropic API** (paid). `leetvault ai` detects which are usable and lets you pick.
+- Analysis is written to its own `analysis.md`; `notes.md` remains the user's scratch space
+  and is never touched.
+
+### Notes
+
+- The prompt is adapted from [leetcode-helper](https://github.com/amanattar/leetcode-helper)
+  by Aman Attar under the MIT License. The original copyright notice is retained in
+  NOTICE.md and in the footer of every generated file, as the licence requires.
+- Generation is best-effort: a provider returns `None` rather than raising, so a slow or
+  failing model can never break a sync.
+
 ## [0.7.1] - 2026-08-04
 
 ### Added
@@ -148,7 +169,8 @@ Initial release.
 - `watch`: polling loop with graceful shutdown and session-expiry warnings.
 - `config`: get/set persistent settings.
 
-[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/priyadip/LeetVault/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/priyadip/LeetVault/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/priyadip/LeetVault/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/priyadip/LeetVault/compare/v0.5.0...v0.6.0

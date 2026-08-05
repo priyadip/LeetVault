@@ -15,6 +15,7 @@ from leetvault.client import LeetCodeClient, LeetCodeCredentials
 
 SERVICE_NAME = "leetvault"
 GITHUB_PAT_KEY = "github_pat"
+ANTHROPIC_KEY = "anthropic_api_key"
 
 
 def _session_key(site: str) -> str:
@@ -50,6 +51,19 @@ def store_github_pat(pat: str) -> None:
 
 def load_github_pat() -> str | None:
     return keyring.get_password(SERVICE_NAME, GITHUB_PAT_KEY)
+
+
+def store_anthropic_key(key: str) -> None:
+    keyring.set_password(SERVICE_NAME, ANTHROPIC_KEY, key)
+
+
+def load_anthropic_key() -> str | None:
+    return keyring.get_password(SERVICE_NAME, ANTHROPIC_KEY)
+
+
+def clear_anthropic_key() -> None:
+    with contextlib.suppress(PasswordDeleteError):
+        keyring.delete_password(SERVICE_NAME, ANTHROPIC_KEY)
 
 
 def clear_github_pat() -> None:

@@ -87,6 +87,25 @@ def watch(
 
 
 @app.command()
+def ai(
+    disable: bool = typer.Option(False, "--disable", help="Turn AI analysis off."),
+    set_key: bool = typer.Option(
+        False, "--set-key", help="Store an Anthropic API key in the OS keyring."
+    ),
+    show: bool = typer.Option(False, "--show", help="Print the current AI settings."),
+) -> None:
+    """Set up optional AI-generated solution analysis (off by default).
+
+    Detects which backends are usable on this machine - a local model via Ollama, the
+    Claude Code CLI, or the Anthropic API - and lets you pick one. Nothing is enabled,
+    downloaded, or billed unless you choose it.
+    """
+    from leetvault.ai_setup import run_ai_setup
+
+    run_ai_setup(console, disable=disable, set_key=set_key, show=show)
+
+
+@app.command()
 def status() -> None:
     """Show session validity/expiry, sync state, and repo config."""
     from leetvault.auth import run_status
