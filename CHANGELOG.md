@@ -5,11 +5,20 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The AI analysis line now says what its count covers. It reports every problem still
+  missing an analysis, so a sync finding one new submission could announce 50 problems and
+  look broken; it now names the backfill as one.
+
 ### Fixed
 
 - `mypy --strict` no longer fails in CI on the optional `anthropic` import. The check passed
   on machines that happened to have the package installed and failed on those that did not,
   which is the wrong way round for an optional backend.
+- `pytest` now runs against `src/` rather than whatever `leetvault` is installed. A
+  non-editable install shadowed the working tree, so the suite could pass locally while
+  testing the released wheel instead of the change under test.
 
 ## [0.8.1] - 2026-08-05
 

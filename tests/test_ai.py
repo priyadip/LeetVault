@@ -8,6 +8,7 @@ import pytest
 import respx
 from httpx import Response
 from rich.console import Console
+from sqlalchemy.orm import Session, sessionmaker
 
 from leetvault.ai import build_user_prompt, get_provider, provider_names
 from leetvault.ai.providers import (
@@ -262,6 +263,65 @@ def test_sync_skips_analysis_when_provider_unset(tmp_path: Path) -> None:
     factory = make_session_factory(make_engine(tmp_path / "db.sqlite"))
     console = Console(record=True, width=200)
     assert _generate_ai_analysis(console, factory, tmp_path) == 0
+
+
+def _seeded_factory(tmp_path: Path, count: int) -> sessionmaker[Session]:
+    from leetvault.db import make_engine, make_session_factory, session_scope
+    from leetvault.models import Problem
+
+    factory = make_session_factory(make_engine(tmp_path / "db.sqlite"))
+    with session_scope(factory) as session:
+        for i in range(1, count + 1):
+            session.add(
+                Problem(
+                    question_id=i,
+                    frontend_id=i,
+                    title=f"Problem {i}",
+                    title_slug=f"problem-{i}",
+                    difficulty="Easy",
+                    paid_only=False,
+                    url=f"https://leetcode.com/problems/problem-{i}/",
+                )
+            )
+    return factory
+
+
+def test_analysis_backfill_says_it_is_a_backfill(tmp_path: Path) -> None:
+    """A sync reporting "1 new submission" then "50 problem(s)" reads like a bug. The
+    count covers everything still missing an analysis, so the message must say so."""
+    from leetvault.sync import _generate_ai_analysis
+
+    store = ConfigStore()
+    store.set("ai_notes_enabled", True)
+    store.set("ai_provider", "gemini")
+    factory = _seeded_factory(tmp_path, 50)
+    console = Console(record=True, width=200)
+    with respx.mock:
+        respx.post(url__regex=r".*generativelanguage.*").mock(return_value=Response(500, json={}))
+        _generate_ai_analysis(console, factory, tmp_path)
+    output = console.export_text()
+    assert "all 50 problem(s) in your history" in output
+    assert "one-time catch-up" in output
+
+
+def test_analysis_message_distinguishes_partial_backfill(tmp_path: Path) -> None:
+    from leetvault.git_writer import write_analysis_md
+    from leetvault.sync import _generate_ai_analysis
+
+    store = ConfigStore()
+    store.set("ai_notes_enabled", True)
+    store.set("ai_provider", "gemini")
+    factory = _seeded_factory(tmp_path, 50)
+    for i in range(1, 48):  # 47 already done, 3 outstanding
+        meta = ProblemMeta(i, i, f"Problem {i}", f"problem-{i}", "Easy", False, "u")
+        write_analysis_md(tmp_path, meta, "body", "gemini", "m")
+    console = Console(record=True, width=200)
+    with respx.mock:
+        respx.post(url__regex=r".*generativelanguage.*").mock(return_value=Response(500, json={}))
+        _generate_ai_analysis(console, factory, tmp_path)
+    output = console.export_text()
+    assert "3 of 50 problem(s)" in output
+    assert "one-time catch-up" not in output
 
 
 def test_metadata_json_untouched_by_analysis(tmp_path: Path) -> None:

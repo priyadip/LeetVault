@@ -80,6 +80,10 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=leetvault --cov-report=term-missing"
+# Test the working tree, not whatever `leetvault` happens to be installed. Without this a
+# non-editable install shadows src/ and the suite silently validates the released wheel
+# instead of the edits under test - green locally, and no relation to the diff.
+pythonpath = ["src"]
 
 [tool.coverage.run]
 source = ["src/leetvault"]

@@ -507,10 +507,19 @@ def _generate_ai_analysis(console: Console, factory: sessionmaker[Session], repo
     if not pending:
         return 0
 
+    # Say *why* the count is what it is. This runs over every problem still missing an
+    # analysis, not the ones synced just now, so a "1 new submission" sync announcing 50
+    # problems reads like a bug unless the backfill is named as one.
+    with session_scope(factory) as session:
+        total = session.scalar(select(func.count()).select_from(Problem)) or 0
+    scope = (
+        f"all {len(pending)} problem(s) in your history - a one-time catch-up"
+        if len(pending) == total
+        else f"{len(pending)} of {total} problem(s), the ones without an analysis yet"
+    )
     console.print(
-        f"[bold]Generating AI analysis[/bold] for {len(pending)} problem(s) "
-        f"via {provider_name}. This can be slow on a local model - Ctrl+C is safe, "
-        "progress is kept."
+        f"[bold]Generating AI analysis[/bold] for {scope}, via {provider_name}. "
+        "Ctrl+C is safe - finished files are kept and the next run resumes."
     )
 
     written = 0
