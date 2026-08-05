@@ -182,9 +182,112 @@ class AnthropicProvider(AIProvider):
         return "".join(b.text for b in message.content if b.type == "text").strip() or None
 
 
+class GeminiProvider(AIProvider):
+    """Google Gemini's free tier - cloud inference, no local hardware, free API key.
+
+    The practical answer for users with neither the RAM for a local model nor a Claude
+    subscription.
+    """
+
+    name = "gemini"
+    default_model = "gemini-2.0-flash"
+    key_env = "GEMINI_API_KEY"
+
+    @classmethod
+    def _key(cls) -> str | None:
+        from leetvault.auth import load_provider_key
+
+        return os.environ.get(cls.key_env) or load_provider_key(cls.name)
+
+    @classmethod
+    def detect(cls) -> ProviderInfo | None:
+        if not cls._key():
+            return None
+        return ProviderInfo(
+            name=cls.name,
+            display="Google Gemini",
+            detail="API key found",
+            cost="free tier (no local hardware needed)",
+        )
+
+    def generate(self, user_prompt: str) -> str | None:
+        key = self._key()
+        if not key:
+            return None
+        try:
+            response = httpx.post(
+                "https://generativelanguage.googleapis.com/v1beta/models/"
+                f"{self.model}:generateContent",
+                params={"key": key},
+                json={
+                    "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+                    "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+                },
+                timeout=_TIMEOUT,
+            )
+            response.raise_for_status()
+            candidates = response.json().get("candidates") or []
+            parts = candidates[0]["content"]["parts"] if candidates else []
+            text = "".join(p.get("text", "") for p in parts)
+        except Exception:  # noqa: BLE001 - best-effort
+            return None
+        return text.strip() or None
+
+
+class GroqProvider(AIProvider):
+    """Groq's free tier - OpenAI-compatible, very fast, free API key, no local hardware."""
+
+    name = "groq"
+    default_model = "llama-3.3-70b-versatile"
+    key_env = "GROQ_API_KEY"
+
+    @classmethod
+    def _key(cls) -> str | None:
+        from leetvault.auth import load_provider_key
+
+        return os.environ.get(cls.key_env) or load_provider_key(cls.name)
+
+    @classmethod
+    def detect(cls) -> ProviderInfo | None:
+        if not cls._key():
+            return None
+        return ProviderInfo(
+            name=cls.name,
+            display="Groq",
+            detail="API key found",
+            cost="free tier (no local hardware needed)",
+        )
+
+    def generate(self, user_prompt: str) -> str | None:
+        key = self._key()
+        if not key:
+            return None
+        try:
+            response = httpx.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {key}"},
+                json={
+                    "model": self.model,
+                    "messages": [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                },
+                timeout=_TIMEOUT,
+            )
+            response.raise_for_status()
+            choices = response.json().get("choices") or []
+            content = choices[0]["message"]["content"] if choices else None
+        except Exception:  # noqa: BLE001 - best-effort
+            return None
+        return content.strip() if content else None
+
+
 _PROVIDERS: dict[str, type[AIProvider]] = {
     OllamaProvider.name: OllamaProvider,
     ClaudeCliProvider.name: ClaudeCliProvider,
+    GeminiProvider.name: GeminiProvider,
+    GroqProvider.name: GroqProvider,
     AnthropicProvider.name: AnthropicProvider,
 }
 

@@ -12,6 +12,8 @@ from leetvault.ai import build_user_prompt, get_provider, provider_names
 from leetvault.ai.providers import (
     AnthropicProvider,
     ClaudeCliProvider,
+    GeminiProvider,
+    GroqProvider,
     OllamaProvider,
     available_providers,
 )
@@ -34,13 +36,13 @@ PROBLEM = ProblemMeta(
 @pytest.fixture(autouse=True)
 def _no_ambient_backends(monkeypatch: pytest.MonkeyPatch) -> None:
     """Detection must not depend on what happens to be installed on the test machine."""
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    for var in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "GEMINI_API_KEY", "GROQ_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(ClaudeCliProvider, "_executable", classmethod(lambda cls: None))
 
 
 def test_provider_registry_exposes_all_backends() -> None:
-    assert set(provider_names()) == {"ollama", "claude-cli", "anthropic"}
+    assert set(provider_names()) == {"ollama", "claude-cli", "gemini", "groq", "anthropic"}
 
 
 def test_get_provider_unknown_returns_none() -> None:
@@ -200,7 +202,7 @@ def test_ai_setup_reports_no_backends() -> None:
     console = Console(record=True, width=200)
     with respx.mock:
         respx.get("http://localhost:11434/api/tags").mock(side_effect=ConnectionError)
-        run_ai_setup(console, disable=False, set_key=False, show=False)
+        run_ai_setup(console, disable=False, set_key=None, show=False)
     output = console.export_text()
     assert "No AI backend detected" in output
     # and it tells the user how to get each one
@@ -211,14 +213,14 @@ def test_ai_setup_reports_no_backends() -> None:
 def test_ai_setup_disable_writes_config() -> None:
     ConfigStore().set("ai_notes_enabled", True)
     console = Console(record=True, width=200)
-    run_ai_setup(console, disable=True, set_key=False, show=False)
+    run_ai_setup(console, disable=True, set_key=None, show=False)
     assert ConfigStore().get("ai_notes_enabled") is False
     assert "disabled" in console.export_text()
 
 
 def test_ai_setup_show_prints_settings() -> None:
     console = Console(record=True, width=200)
-    run_ai_setup(console, disable=False, set_key=False, show=True)
+    run_ai_setup(console, disable=False, set_key=None, show=True)
     output = console.export_text()
     assert "Enabled" in output
     assert "Provider" in output
@@ -229,7 +231,7 @@ def test_ai_setup_set_key_stores_in_keyring(monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr(ai_setup.typer, "prompt", lambda *a, **k: "sk-ant-test")
     console = Console(record=True, width=200)
-    run_ai_setup(console, disable=False, set_key=True, show=False)
+    run_ai_setup(console, disable=False, set_key="anthropic", show=False)
     assert auth.load_anthropic_key() == "sk-ant-test"
 
 
@@ -264,3 +266,133 @@ def test_metadata_json_untouched_by_analysis(tmp_path: Path) -> None:
     before = json.loads(meta_path.read_text(encoding="utf-8"))
     write_analysis_md(tmp_path, PROBLEM, "body", "ollama", "m")
     assert json.loads(meta_path.read_text(encoding="utf-8")) == before
+
+
+# --- Gemini and Groq: the "no RAM, no Claude subscription" path -------------------
+
+
+def test_gemini_not_detected_without_key() -> None:
+    assert GeminiProvider.detect() is None
+
+
+def test_gemini_detected_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "free-key")
+    info = GeminiProvider.detect()
+    assert info is not None
+    assert "free" in info.cost
+    assert "no local hardware" in info.cost
+
+
+def test_gemini_detected_from_keyring() -> None:
+    from leetvault.auth import store_provider_key
+
+    store_provider_key("gemini", "stored-key")
+    assert GeminiProvider.detect() is not None
+
+
+@respx.mock
+def test_gemini_generate_parses_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "free-key")
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    ).mock(
+        return_value=Response(
+            200,
+            json={"candidates": [{"content": {"parts": [{"text": "## Approach Hash map."}]}}]},
+        )
+    )
+    assert GeminiProvider().generate("analyse") == "## Approach Hash map."
+
+
+@respx.mock
+def test_gemini_generate_returns_none_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "free-key")
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+    ).mock(return_value=Response(429, json={}))
+    assert GeminiProvider().generate("analyse") is None
+
+
+def test_gemini_generate_without_key_returns_none() -> None:
+    assert GeminiProvider().generate("analyse") is None
+
+
+def test_groq_not_detected_without_key() -> None:
+    assert GroqProvider.detect() is None
+
+
+def test_groq_detected_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GROQ_API_KEY", "free-key")
+    info = GroqProvider.detect()
+    assert info is not None
+    assert "free" in info.cost
+
+
+@respx.mock
+def test_groq_generate_parses_openai_shape(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GROQ_API_KEY", "free-key")
+    respx.post("https://api.groq.com/openai/v1/chat/completions").mock(
+        return_value=Response(
+            200, json={"choices": [{"message": {"content": "## Approach Two pointers."}}]}
+        )
+    )
+    assert GroqProvider().generate("analyse") == "## Approach Two pointers."
+
+
+@respx.mock
+def test_groq_sends_bearer_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GROQ_API_KEY", "free-key")
+    route = respx.post("https://api.groq.com/openai/v1/chat/completions").mock(
+        return_value=Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+    )
+    GroqProvider().generate("analyse")
+    assert route.calls.last.request.headers["Authorization"] == "Bearer free-key"
+
+
+def test_provider_keys_are_isolated_per_provider() -> None:
+    """A Gemini key must never be handed to Groq (or vice versa)."""
+    from leetvault.auth import load_provider_key, store_provider_key
+
+    store_provider_key("gemini", "gemini-key")
+    store_provider_key("groq", "groq-key")
+    assert load_provider_key("gemini") == "gemini-key"
+    assert load_provider_key("groq") == "groq-key"
+    assert load_provider_key("anthropic") is None
+
+
+def test_anthropic_key_slot_is_backwards_compatible() -> None:
+    """An Anthropic key stored before multi-provider support must still load."""
+    from leetvault.auth import load_provider_key, store_anthropic_key
+
+    store_anthropic_key("legacy-key")
+    assert load_provider_key("anthropic") == "legacy-key"
+
+
+def test_set_key_rejects_a_provider_that_takes_no_key() -> None:
+    import typer
+
+    console = Console(record=True, width=200)
+    with pytest.raises(typer.Exit):
+        run_ai_setup(console, disable=False, set_key="ollama", show=False)
+    assert "does not take an API key" in console.export_text()
+
+
+def test_set_key_stores_gemini_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    from leetvault import ai_setup
+    from leetvault.auth import load_provider_key
+
+    monkeypatch.setattr(ai_setup.typer, "prompt", lambda *a, **k: "gk-123")
+    console = Console(record=True, width=200)
+    run_ai_setup(console, disable=False, set_key="gemini", show=False)
+    assert load_provider_key("gemini") == "gk-123"
+
+
+def test_setup_lists_free_cloud_options_when_nothing_installed() -> None:
+    """A user with no RAM and no Claude subscription must still be told what to do."""
+    console = Console(record=True, width=200)
+    with respx.mock:
+        respx.get("http://localhost:11434/api/tags").mock(side_effect=ConnectionError)
+        run_ai_setup(console, disable=False, set_key=None, show=False)
+    output = console.export_text()
+    assert "aistudio.google.com" in output
+    assert "console.groq.com" in output

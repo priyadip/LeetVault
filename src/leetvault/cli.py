@@ -89,16 +89,19 @@ def watch(
 @app.command()
 def ai(
     disable: bool = typer.Option(False, "--disable", help="Turn AI analysis off."),
-    set_key: bool = typer.Option(
-        False, "--set-key", help="Store an Anthropic API key in the OS keyring."
+    set_key: str | None = typer.Option(
+        None,
+        "--set-key",
+        metavar="PROVIDER",
+        help="Store an API key for gemini, groq, or anthropic.",
     ),
     show: bool = typer.Option(False, "--show", help="Print the current AI settings."),
 ) -> None:
     """Set up optional AI-generated solution analysis (off by default).
 
     Detects which backends are usable on this machine - a local model via Ollama, the
-    Claude Code CLI, or the Anthropic API - and lets you pick one. Nothing is enabled,
-    downloaded, or billed unless you choose it.
+    Claude Code CLI, a free Gemini or Groq API key, or the Anthropic API - and lets you
+    pick one. Nothing is enabled, downloaded, or billed unless you choose it.
     """
     from leetvault.ai_setup import run_ai_setup
 

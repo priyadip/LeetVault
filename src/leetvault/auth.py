@@ -15,7 +15,7 @@ from leetvault.client import LeetCodeClient, LeetCodeCredentials
 
 SERVICE_NAME = "leetvault"
 GITHUB_PAT_KEY = "github_pat"
-ANTHROPIC_KEY = "anthropic_api_key"
+ANTHROPIC_KEY = "anthropic_api_key"  # kept for backwards compatibility
 
 
 def _session_key(site: str) -> str:
@@ -53,17 +53,35 @@ def load_github_pat() -> str | None:
     return keyring.get_password(SERVICE_NAME, GITHUB_PAT_KEY)
 
 
+def _provider_key_name(provider: str) -> str:
+    # The Anthropic key predates the multi-provider support; keep its original slot so an
+    # existing key keeps working after upgrading.
+    return ANTHROPIC_KEY if provider == "anthropic" else f"ai_key:{provider}"
+
+
+def store_provider_key(provider: str, key: str) -> None:
+    keyring.set_password(SERVICE_NAME, _provider_key_name(provider), key)
+
+
+def load_provider_key(provider: str) -> str | None:
+    return keyring.get_password(SERVICE_NAME, _provider_key_name(provider))
+
+
+def clear_provider_key(provider: str) -> None:
+    with contextlib.suppress(PasswordDeleteError):
+        keyring.delete_password(SERVICE_NAME, _provider_key_name(provider))
+
+
 def store_anthropic_key(key: str) -> None:
-    keyring.set_password(SERVICE_NAME, ANTHROPIC_KEY, key)
+    store_provider_key("anthropic", key)
 
 
 def load_anthropic_key() -> str | None:
-    return keyring.get_password(SERVICE_NAME, ANTHROPIC_KEY)
+    return load_provider_key("anthropic")
 
 
 def clear_anthropic_key() -> None:
-    with contextlib.suppress(PasswordDeleteError):
-        keyring.delete_password(SERVICE_NAME, ANTHROPIC_KEY)
+    clear_provider_key("anthropic")
 
 
 def clear_github_pat() -> None:

@@ -12,9 +12,13 @@ All notable changes to this project are documented here. Format follows
 - `leetvault ai` — optional AI-generated `analysis.md` per problem, explaining the approach,
   walking through your actual code, and covering complexity and edge cases. **Off by
   default**; nothing is downloaded, enabled, or billed unless you choose it.
-- Pluggable backends so the feature works whatever a user already has: **Ollama** (free,
-  local, unlimited), the **Claude Code CLI** (free with an existing Claude subscription), or
-  the **Anthropic API** (paid). `leetvault ai` detects which are usable and lets you pick.
+- Pluggable backends so the feature works whatever a user already has: **Gemini** and
+  **Groq** free tiers (a free API key, no local hardware - the answer for users with neither
+  spare RAM nor a Claude subscription), **Ollama** (free, local, unlimited, offline), the
+  **Claude Code CLI** (free with an existing Claude subscription), or the **Anthropic API**
+  (paid). `leetvault ai` detects which are usable and lets you pick.
+- `leetvault ai --set-key <provider>` stores a per-provider API key in the OS keyring; keys
+  are isolated per provider, and an Anthropic key stored before this release keeps working.
 - Analysis is written to its own `analysis.md`; `notes.md` remains the user's scratch space
   and is never touched.
 

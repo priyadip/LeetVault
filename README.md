@@ -64,17 +64,23 @@ until you turn it on**, and your `notes.md` is never touched.
 
 It works with whichever backend you already have; run `leetvault ai` and it detects them:
 
-| Backend | Cost | Notes |
-|---|---|---|
-| **Ollama** (local) | Free, unlimited | `ollama pull qwen2.5-coder:7b`. Runs offline; no account. Slow without a GPU. |
-| **Claude Code CLI** | Free with an existing Claude subscription | `npm i -g @anthropic-ai/claude-code`, then `claude` once to sign in. |
-| **Anthropic API** | Paid, per token | `pip install anthropic` + an API key. Highest quality. |
+| Backend | Cost | Needs | Notes |
+|---|---|---|---|
+| **Gemini** | Free tier | Free API key | [aistudio.google.com/apikey](https://aistudio.google.com/apikey). No local hardware, no subscription. |
+| **Groq** | Free tier | Free API key | [console.groq.com/keys](https://console.groq.com/keys). Very fast; no local hardware. |
+| **Ollama** (local) | Free, unlimited | ~5 GB disk + RAM | `ollama pull qwen2.5-coder:7b`. Fully offline, no account. Slow without a GPU. |
+| **Claude Code CLI** | Free | An existing Claude subscription | `npm i -g @anthropic-ai/claude-code`, then `claude` once to sign in. |
+| **Anthropic API** | Paid, per token | API key | `pip install anthropic`. Highest quality. |
+
+**Gemini and Groq are the fallback when you have neither spare RAM nor a Claude
+subscription** — a free API key, and inference runs in the cloud.
 
 ```bash
-leetvault ai              # detect backends and choose one
-leetvault ai --show       # print current settings
-leetvault ai --disable    # turn it back off
-leetvault config ai_model qwen2.5-coder:14b   # override the model
+leetvault ai                      # detect backends and choose one
+leetvault ai --set-key gemini     # store a free Gemini key (or groq / anthropic)
+leetvault ai --show               # print current settings
+leetvault ai --disable            # turn it back off
+leetvault config ai_model llama-3.3-70b-versatile   # override the model
 ```
 
 Generation is best-effort — a failing or slow model never breaks a sync, and analysis is
