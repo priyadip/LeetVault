@@ -70,6 +70,13 @@ packages = ["leetvault"]
 mypy_path = "src"
 explicit_package_bases = true
 
+# `anthropic` is an optional backend, imported inside a try/except and absent from CI. A
+# developer who happens to have it installed sees a clean run while CI does not, so pin the
+# behaviour to the machine that has less rather than the one that has more.
+[[tool.mypy.overrides]]
+module = ["anthropic.*", "anthropic"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=leetvault --cov-report=term-missing"

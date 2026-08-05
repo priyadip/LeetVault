@@ -5,6 +5,12 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `mypy --strict` no longer fails in CI on the optional `anthropic` import. The check passed
+  on machines that happened to have the package installed and failed on those that did not,
+  which is the wrong way round for an optional backend.
+
 ## [0.8.1] - 2026-08-05
 
 ### Fixed
