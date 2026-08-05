@@ -44,10 +44,13 @@ _No topic data yet._
 
 ## All Solutions
 
-| # | Problem | Difficulty | Language | Date | Question | Solution |
-| --- | --- | --- | --- | --- | --- | --- |
+| # | Problem | Difficulty | Language | Date | Question | Solution |{% if stats.has_analysis %} Analysis |{% endif %}
+
+| --- | --- | --- | --- | --- | --- | --- |{% if stats.has_analysis %} --- |{% endif %}
+
 {% for row in stats.table %}
-| {{ row.frontend_id }} | [{{ row.title }}]({{ row.url }}) | {{ row.difficulty }} | {{ row.lang }} | {{ row.date }} | [question]({{ row.question_path }}) | [{{ row.file_name }}]({{ row.file_path }}) |
+| {{ row.frontend_id }} | [{{ row.title }}]({{ row.url }}) | {{ row.difficulty }} | {{ row.lang }} | {{ row.date }} | [question]({{ row.question_path }}) | [{{ row.file_name }}]({{ row.file_path }}) |{% if stats.has_analysis %} {% if row.analysis_path %}[analysis]({{ row.analysis_path }}){% else %}-{% endif %} |{% endif %}
+
 {% endfor %}
 
 {% if stats.by_topic %}
@@ -58,10 +61,13 @@ _No topic data yet._
 
 {{ t.count }} problem{{ "s" if t.count != 1 else "" }} · [back to topics](#topics)
 
-| # | Problem | Difficulty | Question | Solution |
-| --- | --- | --- | --- | --- |
+| # | Problem | Difficulty | Question | Solution |{% if stats.has_analysis %} Analysis |{% endif %}
+
+| --- | --- | --- | --- | --- |{% if stats.has_analysis %} --- |{% endif %}
+
 {% for row in t.problems %}
-| {{ row.frontend_id }} | [{{ row.title }}]({{ row.url }}) | {{ row.difficulty }} | [question]({{ row.question_path }}) | [{{ row.file_name }}]({{ row.file_path }}) |
+| {{ row.frontend_id }} | [{{ row.title }}]({{ row.url }}) | {{ row.difficulty }} | [question]({{ row.question_path }}) | [{{ row.file_name }}]({{ row.file_path }}) |{% if stats.has_analysis %} {% if row.analysis_path %}[analysis]({{ row.analysis_path }}){% else %}-{% endif %} |{% endif %}
+
 {% endfor %}
 
 {% endfor %}

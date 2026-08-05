@@ -263,3 +263,88 @@ def test_readme_table_separator_matches_column_count(tmp_path: Path) -> None:
         header_cols = len(lines[i - 1].split("|"))
         sep_cols = len(line.split("|"))
         assert sep_cols == header_cols, f"line {i}: separator has {sep_cols}, header {header_cols}"
+
+
+def test_readme_omits_analysis_column_when_feature_unused(tmp_path: Path) -> None:
+    """AI analysis is opt-in. Users who never enable it must not get a column of dashes."""
+    factory = make_session_factory(make_engine(tmp_path / "leetvault.db"))
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+
+    with session_scope(factory) as session:
+        p1 = _make_problem(1, 1, "two-sum", "Easy", topics=["Array"])
+        p1.submissions = [_make_submission(100, 1, "python3", 1000)]
+        session.add(p1)
+
+    with session_scope(factory) as session:
+        content = generate_readme(session, repo_path).read_text(encoding="utf-8")
+
+    assert "Analysis |" not in content
+    assert "analysis.md" not in content
+
+
+def test_readme_links_analysis_when_present(tmp_path: Path) -> None:
+    """The files were on GitHub but unreachable from the dashboard, which is the same as
+    missing. Link the ones that exist and mark the ones that do not."""
+    factory = make_session_factory(make_engine(tmp_path / "leetvault.db"))
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+
+    with session_scope(factory) as session:
+        p1 = _make_problem(1, 1, "two-sum", "Easy", topics=["Array"])
+        p1.submissions = [_make_submission(100, 1, "python3", 1000)]
+        p2 = _make_problem(2, 2, "add-two-numbers", "Medium", topics=["Math"])
+        p2.submissions = [_make_submission(200, 2, "python3", 2000)]
+        session.add_all([p1, p2])
+
+    analysed = repo_path / "Problems" / "two-sum"
+    analysed.mkdir(parents=True)
+    (analysed / "analysis.md").write_text("# analysis", encoding="utf-8")
+
+    with session_scope(factory) as session:
+        content = generate_readme(session, repo_path).read_text(encoding="utf-8")
+
+    assert "| Analysis |" in content
+    assert "[analysis](Problems/two-sum/analysis.md)" in content
+    # present in both the All Solutions table and the per-topic table
+    assert content.count("[analysis](Problems/two-sum/analysis.md)") == 2
+    assert "analysis](Problems/add-two-numbers" not in content
+
+
+def test_readme_separator_matches_when_analysis_column_present(tmp_path: Path) -> None:
+    """A partial backfill is the normal state on a free tier, so the mixed table must still
+    render - a short separator row silently breaks the whole table on GitHub."""
+    factory = make_session_factory(make_engine(tmp_path / "leetvault.db"))
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+
+    with session_scope(factory) as session:
+        for i in (1, 2):
+            p = _make_problem(i, i, f"problem-{i}", "Easy", topics=[f"Topic {i}"])
+            p.submissions = [_make_submission(100 + i, i, "python3", 1000 * i)]
+            session.add(p)
+
+    solved = repo_path / "Problems" / "problem-1"
+    solved.mkdir(parents=True)
+    (solved / "analysis.md").write_text("# analysis", encoding="utf-8")
+
+    with session_scope(factory) as session:
+        content = generate_readme(session, repo_path).read_text(encoding="utf-8")
+
+    # Every row must match the header of *its own* table; the All Solutions and per-topic
+    # tables have different widths, so comparing across them proves nothing.
+    lines = content.splitlines()
+    width: int | None = None
+    checked = 0
+    for i, line in enumerate(lines):
+        if not line.startswith("|"):
+            width = None
+            continue
+        if set(line.replace("|", "").strip()) == {"-", " "}:
+            width = len(lines[i - 1].split("|"))
+            assert len(line.split("|")) == width, f"separator mismatch at line {i}"
+            continue
+        if width is not None:
+            assert len(line.split("|")) == width, f"row width mismatch at line {i}: {line}"
+            checked += 1
+    assert checked >= 4  # both tables, both the analysed and un-analysed problem

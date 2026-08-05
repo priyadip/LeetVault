@@ -5,6 +5,13 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- An **Analysis** column in the README tables, linking each problem to its `analysis.md`.
+  The files were being written and pushed correctly but nothing in the dashboard pointed at
+  them, which from the reader's side is the same as their not being there. The column
+  appears only once at least one analysis exists, and marks problems without one.
+
 ### Changed
 
 - The AI analysis line now says what its count covers. It reports every problem still

@@ -69,6 +69,9 @@ class SolutionEntry:
     file_path: str
     file_name: str
     question_path: str
+    # None when this problem has no analysis yet. AI analysis is optional and fills in
+    # gradually - free tiers cap out daily - so the table has to render a partial state.
+    analysis_path: str | None = None
 
 
 @dataclass
@@ -90,6 +93,9 @@ class ReadmeStats:
     recent: list[SolutionEntry] = field(default_factory=list)
     table: list[SolutionEntry] = field(default_factory=list)
     generated_at: str = ""
+    # Only add the Analysis column once something is there to link to, so users who never
+    # enable the feature do not get a column of dashes.
+    has_analysis: bool = False
 
 
 def _latest_submission(problem: Problem) -> Submission | None:
@@ -98,8 +104,12 @@ def _latest_submission(problem: Problem) -> Submission | None:
     return max(problem.submissions, key=lambda s: s.timestamp)
 
 
-def _to_entry(problem: Problem, submission: Submission) -> SolutionEntry:
+def _to_entry(
+    problem: Problem, submission: Submission, repo_path: Path | None = None
+) -> SolutionEntry:
     ext = file_extension(submission.lang)
+    analysis_rel = f"Problems/{problem.title_slug}/analysis.md"
+    has_analysis = repo_path is not None and (repo_path / analysis_rel).exists()
     solved_date = datetime.fromtimestamp(submission.timestamp, tz=UTC).date().isoformat()
     return SolutionEntry(
         frontend_id=problem.frontend_id,
@@ -111,6 +121,7 @@ def _to_entry(problem: Problem, submission: Submission) -> SolutionEntry:
         file_path=f"Problems/{problem.title_slug}/latest.{ext}",
         file_name=f"latest.{ext}",
         question_path=f"Problems/{problem.title_slug}/question.md",
+        analysis_path=analysis_rel if has_analysis else None,
     )
 
 
@@ -129,7 +140,7 @@ def _compute_streaks(dates: list[date]) -> tuple[int, int]:
     return current, longest
 
 
-def aggregate_stats(session: Session) -> ReadmeStats:
+def aggregate_stats(session: Session, repo_path: Path | None = None) -> ReadmeStats:
     problems = list(session.scalars(select(Problem)))
     total_solved = len(problems)
 
@@ -166,7 +177,7 @@ def aggregate_stats(session: Session) -> ReadmeStats:
         for topic in problem.topics:
             topic_counts[topic.name] += 1
             if latest is not None:
-                topic_entries[topic.name].append(_to_entry(problem, latest))
+                topic_entries[topic.name].append(_to_entry(problem, latest, repo_path))
     by_topic = [
         TopicStat(
             name=name,
@@ -190,11 +201,11 @@ def aggregate_stats(session: Session) -> ReadmeStats:
         (problem, submission) for problem in problems for submission in problem.submissions
     ]
     all_submissions.sort(key=lambda ps: ps[1].timestamp, reverse=True)
-    recent = [_to_entry(p, s) for p, s in all_submissions[:_RECENT_LIMIT]]
+    recent = [_to_entry(p, s, repo_path) for p, s in all_submissions[:_RECENT_LIMIT]]
 
     table = sorted(
         (
-            _to_entry(problem, latest)
+            _to_entry(problem, latest, repo_path)
             for problem in problems
             if (latest := _latest_submission(problem)) is not None
         ),
@@ -211,6 +222,7 @@ def aggregate_stats(session: Session) -> ReadmeStats:
         recent=recent,
         table=table,
         generated_at=datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M UTC"),
+        has_analysis=any(row.analysis_path for row in table),
     )
 
 
@@ -226,7 +238,7 @@ def render_readme(stats: ReadmeStats) -> str:
 
 
 def generate_readme(session: Session, repo_path: Path) -> Path:
-    stats = aggregate_stats(session)
+    stats = aggregate_stats(session, repo_path)
     content = render_readme(stats)
     readme_path = repo_path / "README.md"
     readme_path.write_text(content, encoding="utf-8")
