@@ -109,6 +109,47 @@ def ai(
 
 
 @app.command()
+def analyze(
+    problem: str | None = typer.Argument(
+        None, help="Problem slug, number, or part of its title. Omit with --all or --from."
+    ),
+    provider: str | None = typer.Option(
+        None, "--provider", "-p", help="Backend to use instead of the configured one."
+    ),
+    model: str | None = typer.Option(None, "--model", help="Model override for this run."),
+    all_: bool = typer.Option(False, "--all", help="Re-analyse every problem."),
+    from_: str | None = typer.Option(
+        None, "--from", help="Re-analyse only what a given provider generated, e.g. groq."
+    ),
+    list_: bool = typer.Option(
+        False, "--list", help="Show which model wrote each analysis and exit."
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the overwrite confirmation."),
+) -> None:
+    """Regenerate an existing analysis.md with a different AI backend.
+
+    `sync` only fills gaps, so an analysis you dislike stays forever. This overwrites on
+    purpose: one problem, everything a given provider wrote, or the lot.
+
+        leetvault analyze --list                 # who wrote what
+        leetvault analyze two-sum -p nvidia      # redo one problem
+        leetvault analyze --from groq -p nvidia  # redo everything Groq wrote
+    """
+    from leetvault.analyze import run_analyze
+
+    run_analyze(
+        console,
+        target=problem,
+        provider_name=provider,
+        model=model,
+        all_=all_,
+        from_=from_,
+        show_list=list_,
+        assume_yes=yes,
+    )
+
+
+@app.command()
 def status() -> None:
     """Show session validity/expiry, sync state, and repo config."""
     from leetvault.auth import run_status

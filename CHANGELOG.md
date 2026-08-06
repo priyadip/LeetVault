@@ -5,6 +5,15 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- `leetvault analyze` - regenerate an existing `analysis.md` with a different backend.
+  `sync` deliberately skips problems that already have one, which is what makes a backfill
+  resumable but also meant an analysis you disliked was permanent. Select by slug, number or
+  title, by the provider that wrote it (`--from groq`), or `--all`; `--list` shows which
+  model wrote what. Overwrites are confirmed first, and a failed regeneration keeps the
+  existing file rather than losing it.
+
 ## [0.9.0] - 2026-08-06
 
 ### Added
