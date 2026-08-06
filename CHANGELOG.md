@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-08-06
+
 ### Added
 
 - `leetvault commands` - every command in one place with what it does, and `--full` for
