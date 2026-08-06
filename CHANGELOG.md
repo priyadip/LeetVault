@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-08-06
+
 ### Added
 
 - `leetvault analyze` - regenerate an existing `analysis.md` with a different backend.
