@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-08-06
+
 ### Added
 
 - **NVIDIA NIM** as an AI backend (`leetvault ai --set-key nvidia`), defaulting to
