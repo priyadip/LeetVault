@@ -52,6 +52,10 @@ _PAGE_DELAY_RANGE = (0.3, 0.5)
 # Consecutive AI failures tolerated before giving up on the whole batch. A dead backend
 # fails the same way every time, so a few attempts is enough to prove it.
 _AI_FAILURE_LIMIT = 3
+# Fewest `##` sections an analysis must have to count as one. Models occasionally return a
+# stub or a truncated reply; writing that would be worse than writing nothing, because the
+# file's existence is what makes later runs skip the problem - the junk would be permanent.
+_AI_MIN_SECTIONS = 4
 
 
 def _sleep_between_pages() -> None:
@@ -558,10 +562,15 @@ def _generate_ai_analysis(console: Console, factory: sessionmaker[Session], repo
             body = provider.generate(
                 build_user_prompt(title, difficulty, topics, statement, lang, code)
             )
-            if body:
+            if body and _looks_like_analysis(body):
                 write_analysis_md(repo_path, meta, body, str(provider_name), provider.model)
                 written += 1
             else:
+                if body:
+                    provider.last_error = (
+                        f"model returned {len(body)} chars with no section headings "
+                        "(truncated or refused)"
+                    )
                 failed += 1
                 last_error = provider.last_error or last_error
                 # One backend that is down fails identically for every problem. Stop after a
@@ -588,6 +597,11 @@ def _generate_ai_analysis(console: Console, factory: sessionmaker[Session], repo
             "or switch with [bold]leetvault ai[/bold]."
         )
     return written
+
+
+def _looks_like_analysis(body: str) -> bool:
+    """Whether a model response is a real analysis rather than a stub or a truncation."""
+    return sum(1 for line in body.splitlines() if line.startswith("## ")) >= _AI_MIN_SECTIONS
 
 
 def _latest_solution_source(

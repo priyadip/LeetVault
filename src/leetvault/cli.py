@@ -93,15 +93,15 @@ def ai(
         None,
         "--set-key",
         metavar="PROVIDER",
-        help="Store an API key for gemini, groq, or anthropic.",
+        help="Store an API key for gemini, groq, nvidia, or anthropic.",
     ),
     show: bool = typer.Option(False, "--show", help="Print the current AI settings."),
 ) -> None:
     """Set up optional AI-generated solution analysis (off by default).
 
     Detects which backends are usable on this machine - a local model via Ollama, the
-    Claude Code CLI, a free Gemini or Groq API key, or the Anthropic API - and lets you
-    pick one. Nothing is enabled, downloaded, or billed unless you choose it.
+    Claude Code CLI, a free Gemini, Groq or NVIDIA NIM API key, or the Anthropic API - and
+    lets you pick one. Nothing is enabled, downloaded, or billed unless you choose it.
     """
     from leetvault.ai_setup import run_ai_setup
 

@@ -5,6 +5,25 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- **NVIDIA NIM** as an AI backend (`leetvault ai --set-key nvidia`), defaulting to
+  `nvidia/nemotron-3-ultra-550b-a55b`. Its free-tier quota is separate from Gemini's and
+  Groq's, so a backfill stopped by one provider's daily limit can be finished on another.
+  Thinking is enabled; the model returns its reasoning in a separate field, so the chain of
+  thought never reaches the generated file.
+
+### Changed
+
+- The analysis prompt now specifies the shape of each section rather than only its title:
+  contrast with the brute-force approach, a bullet per meaningful line quoted verbatim, a
+  per-iteration state table for the dry run, Big-O with its justification attached and its
+  variables defined, and a named algorithmic pattern. Left to itself a model writes a
+  paragraph per heading, which reads once and is useless as reference.
+- Responses without at least four `##` sections are rejected instead of written. A stub or
+  truncated reply would otherwise be saved permanently, since the file's existence is what
+  makes later runs skip that problem.
+
 ## [0.8.2] - 2026-08-05
 
 ### Added

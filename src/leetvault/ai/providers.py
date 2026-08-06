@@ -320,11 +320,80 @@ class GroqProvider(AIProvider):
         return content.strip() if content else None
 
 
+class NvidiaProvider(AIProvider):
+    """NVIDIA NIM's free tier - OpenAI-compatible, hosts very large open models.
+
+    Worth having alongside Gemini and Groq because the daily quotas are separate, so a
+    user who exhausts one can finish a backfill on another.
+    """
+
+    name = "nvidia"
+    default_model = "nvidia/nemotron-3-ultra-550b-a55b"
+    key_env = "NVIDIA_API_KEY"
+    # Reasoning models spend tokens thinking before they answer, and a full analysis is
+    # long, so the ceiling has to cover both or the response is truncated mid-section.
+    _REASONING_BUDGET = 16384
+    _MAX_TOKENS = 32768
+
+    @classmethod
+    def _key(cls) -> str | None:
+        from leetvault.auth import load_provider_key
+
+        return os.environ.get(cls.key_env) or load_provider_key(cls.name)
+
+    @classmethod
+    def detect(cls) -> ProviderInfo | None:
+        if not cls._key():
+            return None
+        return ProviderInfo(
+            name=cls.name,
+            display="NVIDIA NIM",
+            detail="API key found",
+            cost="free tier (no local hardware needed)",
+        )
+
+    def generate(self, user_prompt: str) -> str | None:
+        key = self._key()
+        if not key:
+            return None
+        try:
+            response = httpx.post(
+                "https://integrate.api.nvidia.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {key}"},
+                json={
+                    "model": self.model,
+                    "messages": [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    "temperature": 0.6,
+                    "top_p": 0.95,
+                    "max_tokens": self._MAX_TOKENS,
+                    # Thinking is worth its cost here: the analysis has to trace real code
+                    # and justify complexity claims, not recall a familiar answer.
+                    "chat_template_kwargs": {"enable_thinking": True},
+                    "reasoning_budget": self._REASONING_BUDGET,
+                },
+                timeout=_TIMEOUT,
+            )
+            response.raise_for_status()
+            choices = response.json().get("choices") or []
+            # Non-streaming keeps this consistent with the other providers - there is no
+            # partial output to display anyway. `reasoning_content` is returned as its own
+            # field rather than inline, so the chain of thought never reaches the file.
+            content = choices[0]["message"].get("content") if choices else None
+        except Exception as exc:  # noqa: BLE001 - best-effort, but recorded
+            self._fail(exc)
+            return None
+        return content.strip() if content else None
+
+
 _PROVIDERS: dict[str, type[AIProvider]] = {
     OllamaProvider.name: OllamaProvider,
     ClaudeCliProvider.name: ClaudeCliProvider,
     GeminiProvider.name: GeminiProvider,
     GroqProvider.name: GroqProvider,
+    NvidiaProvider.name: NvidiaProvider,
     AnthropicProvider.name: AnthropicProvider,
 }
 

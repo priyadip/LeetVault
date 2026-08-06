@@ -33,6 +33,11 @@ _SETUP_HINTS = {
         "    leetvault ai --set-key groq\n"
         "  Free tier, very fast, cloud-hosted - needs no local hardware."
     ),
+    "nvidia": (
+        "Get a free API key at https://build.nvidia.com, then:\n"
+        "    leetvault ai --set-key nvidia\n"
+        "  Free tier, cloud-hosted, very large open models - separate quota from Gemini/Groq."
+    ),
     "anthropic": (
         "Install the SDK and provide a key:\n"
         "    pip install anthropic\n"
@@ -42,7 +47,7 @@ _SETUP_HINTS = {
 }
 
 # Providers whose credential is a plain API key leetvault can store for the user.
-_KEY_PROVIDERS = ("gemini", "groq", "anthropic")
+_KEY_PROVIDERS = ("gemini", "groq", "nvidia", "anthropic")
 
 
 def run_ai_setup(console: Console, *, disable: bool, set_key: str | None, show: bool) -> None:

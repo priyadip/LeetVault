@@ -16,6 +16,7 @@ from leetvault.ai.providers import (
     ClaudeCliProvider,
     GeminiProvider,
     GroqProvider,
+    NvidiaProvider,
     OllamaProvider,
     available_providers,
 )
@@ -44,7 +45,14 @@ def _no_ambient_backends(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_provider_registry_exposes_all_backends() -> None:
-    assert set(provider_names()) == {"ollama", "claude-cli", "gemini", "groq", "anthropic"}
+    assert set(provider_names()) == {
+        "ollama",
+        "claude-cli",
+        "gemini",
+        "groq",
+        "nvidia",
+        "anthropic",
+    }
 
 
 def test_get_provider_unknown_returns_none() -> None:
@@ -493,3 +501,103 @@ def test_gemini_default_model_is_an_alias() -> None:
     """Pinned Gemini names get retired or dropped to a zero free-tier quota; the alias
     tracks whatever Google actually serves."""
     assert GeminiProvider.default_model == "gemini-flash-latest"
+
+
+def test_nvidia_not_detected_without_key() -> None:
+    assert NvidiaProvider.detect() is None
+
+
+def test_nvidia_detected_with_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
+    info = NvidiaProvider.detect()
+    assert info is not None
+    assert info.name == "nvidia"
+    assert "free tier" in info.cost
+
+
+@respx.mock
+def test_nvidia_generate_parses_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
+    route = respx.post("https://integrate.api.nvidia.com/v1/chat/completions").mock(
+        return_value=Response(
+            200, json={"choices": [{"message": {"content": "## Approach\nHash map.\n"}}]}
+        )
+    )
+    assert NvidiaProvider().generate("analyse this") == "## Approach\nHash map."
+    sent = json.loads(route.calls[0].request.content)
+    assert sent["model"] == "nvidia/nemotron-3-ultra-550b-a55b"
+    assert sent["chat_template_kwargs"] == {"enable_thinking": True}
+    assert sent["reasoning_budget"] > 0
+    assert route.calls[0].request.headers["authorization"] == "Bearer nvapi-test"
+
+
+@respx.mock
+def test_nvidia_never_writes_the_chain_of_thought(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`reasoning_content` is a sibling of `content`, not part of it. Only the answer is
+    the analysis - the thinking must not reach the user's repo."""
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
+    respx.post("https://integrate.api.nvidia.com/v1/chat/completions").mock(
+        return_value=Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": "## Approach\nHash map.",
+                            "reasoning_content": "Let me think about this step by step...",
+                        }
+                    }
+                ]
+            },
+        )
+    )
+    body = NvidiaProvider().generate("analyse this")
+    assert body == "## Approach\nHash map."
+    assert "step by step" not in (body or "")
+
+
+@respx.mock
+def test_nvidia_records_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
+    respx.post("https://integrate.api.nvidia.com/v1/chat/completions").mock(
+        return_value=Response(401, json={"error": {"message": "invalid key"}})
+    )
+    provider = NvidiaProvider()
+    assert provider.generate("analyse this") is None
+    assert provider.last_error == "HTTP 401: invalid key"
+
+
+def test_stub_responses_are_rejected_not_written() -> None:
+    """A short or truncated reply must not be written: analysis.md existing is what makes
+    later runs skip the problem, so junk would be permanent."""
+    from leetvault.sync import _looks_like_analysis
+
+    assert not _looks_like_analysis("I cannot help with that.")
+    assert not _looks_like_analysis("## Problem Understanding\nIt asks for two numbers.")
+    assert _looks_like_analysis(
+        "## Problem Understanding\nx\n## Approach\ny\n## Algorithm\nz\n## Complexity\nw"
+    )
+
+
+def test_prompt_asks_for_the_formats_that_make_analysis_useful() -> None:
+    """Naming the exact shape per section is most of the difference between a useful
+    analysis and filler, so the instructions must survive future prompt edits."""
+    from leetvault.ai.prompt import SYSTEM_PROMPT
+
+    lowered = SYSTEM_PROMPT.lower()
+    assert "brute-force" in lowered  # contrast is where the insight lives
+    assert "verbatim" in lowered  # quote the user's real lines
+    assert "sliding window" in lowered and "union-find" in lowered  # pattern vocabulary
+    assert "| step |" in lowered  # dry-run table shape
+    assert "what n" in lowered  # complexity must define its variables
+    for section in (
+        "## Problem Understanding",
+        "## Approach",
+        "## Algorithm",
+        "## Line-by-Line Explanation",
+        "## Dry Run",
+        "## Complexity",
+        "## Edge Cases",
+        "## Possible Improvements",
+    ):
+        assert section in SYSTEM_PROMPT
