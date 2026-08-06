@@ -5,6 +5,14 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- `leetvault commands` - every command in one place with what it does, and `--full` for
+  every argument and option. Built by introspecting the Typer app rather than from a
+  hand-written list, so a new command cannot be left out: tests assert that every
+  registered command and parameter appears in the output, including the global flags and
+  `--help`, which click supplies implicitly.
+
 ## [0.10.0] - 2026-08-06
 
 ### Added

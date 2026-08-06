@@ -150,6 +150,21 @@ def analyze(
 
 
 @app.command()
+def commands(
+    full: bool = typer.Option(
+        False, "--full", help="Include every argument and option for each command."
+    ),
+) -> None:
+    """List every leetvault command and what it does.
+
+    Generated from the CLI itself, so it can never fall behind the actual commands.
+    """
+    from leetvault.commands import run_commands
+
+    run_commands(console, full=full)
+
+
+@app.command()
 def status() -> None:
     """Show session validity/expiry, sync state, and repo config."""
     from leetvault.auth import run_status
