@@ -5,6 +5,14 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `bot --install` uploaded every API key as the literal string `-` rather than the key. gh
+  reads a secret from standard input only when `--body` is absent; `--body -` is not a stdin
+  convention and stores a one-character secret. The failure surfaced much later, as an
+  "Invalid API Key" 401 from the workflow. **Anyone who ran `bot --install` before this must
+  re-run it** to replace the broken secrets.
+
 ## [0.15.1] - 2026-08-09
 
 ### Fixed

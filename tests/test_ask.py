@@ -239,6 +239,11 @@ def test_secrets_are_passed_on_stdin_not_the_command_line(
         assert "SECRET-VALUE" not in " ".join(args), "key leaked into argv"
         assert stdin == "SECRET-VALUE"
         assert args[:2] == ["secret", "set"]
+        # The load-bearing assertion. gh reads stdin only when --body is absent; passing
+        # `--body -` stores a literal "-" and surfaces much later as "Invalid API Key".
+        # Without this line the earlier version of this test passed while every uploaded
+        # secret was a single dash.
+        assert "--body" not in args, "gh ignores stdin whenever --body is present"
 
 
 def test_every_stored_key_is_uploaded(monkeypatch: pytest.MonkeyPatch) -> None:

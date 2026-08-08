@@ -211,8 +211,11 @@ def _upload_secrets(slug: str) -> list[Step]:
         if not key:
             continue
         name = _SECRET_NAMES[provider]
-        # Passed on stdin so the key never appears in a process listing or shell history.
-        ok, message = _run_gh(["secret", "set", name, "--repo", slug, "--body", "-"], stdin=key)
+        # No --body at all: gh reads the value from stdin only when the flag is absent, so
+        # the key never reaches argv, a process listing, or shell history. `--body -` does
+        # not mean stdin - it stores a literal "-", which is what every secret here was
+        # until this was fixed, and it surfaces later as "Invalid API Key".
+        ok, message = _run_gh(["secret", "set", name, "--repo", slug], stdin=key)
         steps.append(Step(f"secret {name}", ok, message))
     if not steps:
         steps.append(Step("secrets", False, "no provider keys stored - run `leetvault ai`"))
