@@ -5,6 +5,20 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `leetvault bot --install` pushes the workflow it commits. It ran a bare `git push`, which
+  needs the branch to have an upstream; a repository leetvault created and only ever pushed
+  to by URL has none, so it failed with git's `push.autoSetupRemote` advice after every other
+  step had succeeded. The push now names its refspec, as the rest of the package already did.
+- A run that committed but failed to push now retries the push. It previously reported
+  "already up to date" because there was nothing new to commit, leaving the workflow on disk
+  and never reaching GitHub.
+- Failure reporting names only the steps that failed. It reprinted the entire manual
+  checklist after five of six steps had succeeded, and attributed a git error to missing gh
+  scopes - sending you to the wrong settings page. Scope advice now appears only for an
+  actual permission error, and a failed push prints the exact `git push` command.
+
 ## [0.14.0] - 2026-08-08
 
 ### Added

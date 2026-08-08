@@ -314,3 +314,118 @@ def test_install_falls_back_when_gh_is_missing(
     assert (tmp_path / WORKFLOW_PATH).exists()
     assert "not installed" in output
     assert "Manual setup" in output
+
+
+def test_push_names_its_refspec_rather_than_relying_on_upstream(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A repo leetvault created and only ever pushed to by URL has no upstream, so a bare
+    `git push` fails with git's push.autoSetupRemote advice - which reads like a permissions
+    problem and is not one."""
+    import leetvault.bot as bot
+
+    calls: list[list[str]] = []
+
+    def fake_git(repo_path, args, *, credential_helper=None):  # type: ignore[no-untyped-def]
+        calls.append(args)
+        if args[:2] == ["diff", "--staged"]:
+            return 1, ""  # something staged
+        return 0, ""
+
+    monkeypatch.setattr(bot, "_gh", lambda: "/usr/bin/gh")
+    monkeypatch.setattr(bot, "_git", fake_git)
+    step = bot._commit_and_push(tmp_path)
+    assert step.ok
+    push = next(a for a in calls if a and a[0] == "push")
+    assert push == ["push", "origin", "HEAD:main"]
+
+
+def test_push_is_retried_when_a_previous_run_committed_but_failed_to_push(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reporting "already up to date" because there is nothing new to commit would leave
+    the workflow on disk forever, never reaching GitHub."""
+    import leetvault.bot as bot
+
+    calls: list[list[str]] = []
+
+    def fake_git(repo_path, args, *, credential_helper=None):  # type: ignore[no-untyped-def]
+        calls.append(args)
+        return 0, ""  # diff --staged returns 0 => nothing staged, already committed
+
+    monkeypatch.setattr(bot, "_gh", lambda: "/usr/bin/gh")
+    monkeypatch.setattr(bot, "_git", fake_git)
+    step = bot._commit_and_push(tmp_path)
+    assert step.ok
+    assert any(a and a[0] == "push" for a in calls), "must still push when nothing to commit"
+    assert not any(a and a[0] == "commit" for a in calls), "nothing to commit"
+
+
+def test_push_uses_gh_credentials_for_the_workflow_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import leetvault.bot as bot
+
+    helpers: list[str | None] = []
+
+    def fake_git(repo_path, args, *, credential_helper=None):  # type: ignore[no-untyped-def]
+        if args and args[0] == "push":
+            helpers.append(credential_helper)
+        return (1, "") if args[:2] == ["diff", "--staged"] else (0, "")
+
+    monkeypatch.setattr(bot, "_gh", lambda: "/usr/bin/gh")
+    monkeypatch.setattr(bot, "_git", fake_git)
+    bot._commit_and_push(tmp_path)
+    assert helpers == ["/usr/bin/gh"]
+
+
+def test_a_git_failure_is_not_blamed_on_gh_scopes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Five of six steps succeeded and the report still said gh needed scopes and reprinted
+    the whole manual checklist - which reads as though nothing worked."""
+    import leetvault.bot as bot
+    from leetvault import auth
+
+    ConfigStore().set("repo_url", "https://github.com/owner/repo.git")
+    ConfigStore().set("ai_provider", "groq")
+    monkeypatch.setattr(bot, "_gh", lambda: "/usr/bin/gh")
+    monkeypatch.setattr(auth, "load_provider_key", lambda p: "k" if p == "groq" else None)
+    monkeypatch.setattr(bot, "_run_gh", lambda args, stdin=None: (True, ""))
+    monkeypatch.setattr(
+        bot,
+        "_commit_and_push",
+        lambda p, branch="main": bot.Step("commit and push", False, "no upstream configured"),
+    )
+
+    console = Console(record=True, width=200)
+    run_bot(console, install=True, repo=tmp_path, show=False, manual=False)
+    output = console.export_text()
+    assert "1 step(s) need doing by hand" in output
+    assert "gh auth refresh" not in output, "a git error must not be blamed on gh scopes"
+    assert "push origin HEAD:main" in output, "must give the command that actually fixes it"
+    assert "New repository secret" not in output, "secrets succeeded; do not reprint them"
+
+
+def test_permission_failures_still_recommend_refreshing_scopes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import leetvault.bot as bot
+    from leetvault import auth
+
+    ConfigStore().set("repo_url", "https://github.com/owner/repo.git")
+    monkeypatch.setattr(bot, "_gh", lambda: "/usr/bin/gh")
+    monkeypatch.setattr(auth, "load_provider_key", lambda p: "k" if p == "groq" else None)
+
+    def fake_run(args: list[str], stdin: str | None = None) -> tuple[bool, str]:
+        if args[0] == "auth":
+            return True, ""
+        return False, "HTTP 403: Resource not accessible by integration"
+
+    monkeypatch.setattr(bot, "_run_gh", fake_run)
+    monkeypatch.setattr(
+        bot, "_commit_and_push", lambda p, branch="main": bot.Step("commit and push", True)
+    )
+    console = Console(record=True, width=200)
+    run_bot(console, install=True, repo=tmp_path, show=False, manual=False)
+    assert "gh auth refresh -s repo,workflow" in console.export_text()
