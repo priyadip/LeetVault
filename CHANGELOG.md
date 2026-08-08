@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-08-09
+
 ### Fixed
 
 - Pushing no longer fails when the remote has moved on. The Q&A bot commits answers from a
