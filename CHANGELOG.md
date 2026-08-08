@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-08-08
+
 ### Fixed
 
 - `leetvault bot --install` pushes the workflow it commits. It ran a bare `git push`, which
