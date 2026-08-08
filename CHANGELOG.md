@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.15.3] - 2026-08-09
+
 ### Fixed
 
 - A question asked in the issue title is no longer discarded. GitHub issue forms write
