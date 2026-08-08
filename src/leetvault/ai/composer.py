@@ -36,7 +36,11 @@ _DELAYS: dict[str, float] = {
     "ollama": 0.0,
     "claude-cli": 2.0,
     "gemini": 4.0,
-    "groq": 12.0,
+    # Groq's free tier meters 8000 tokens/minute and a single analysis call reserves most
+    # of that, so calls have to be roughly a minute apart or the next one is refused. This
+    # only applies between calls for one problem - a problem answered in a single call
+    # never waits.
+    "groq": 60.0,
     "nvidia": 3.0,
     "anthropic": 1.0,
 }
@@ -47,6 +51,11 @@ _DEFAULT_DELAY = 5.0
 # worst case without a ceiling is hours on one file with no way to tell whether it is
 # working or wedged. Stopping and saying so is more useful than either.
 _PROBLEM_BUDGET_SECONDS = 900.0
+
+# Output tokens to reserve per section asked for. Splitting only helps a metered API if the
+# request shrinks with it: asking for one section while still reserving a whole analysis's
+# worth of output is the same size request as before, and gets refused just as fast.
+_TOKENS_PER_SECTION = 1400
 
 
 def delay_for(provider_name: str) -> float:
@@ -146,7 +155,9 @@ def compose_analysis(
                 sleep(pause)
             system = build_system_prompt(group if split > 1 else None)
             calls += 1
-            body = provider.generate(user_prompt, system)
+            body = provider.generate(
+                user_prompt, system, max_output_tokens=_TOKENS_PER_SECTION * len(group)
+            )
             if not body or not is_complete(body, group):
                 last_error = provider.last_error or (
                     f"incomplete response for {', '.join(group)}"

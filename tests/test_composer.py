@@ -19,13 +19,20 @@ class FakeProvider(AIProvider):
         super().__init__(None)
         self.responder = responder
         self.calls: list[list[str]] = []
+        self.budgets: list[int | None] = []
 
     @classmethod
     def detect(cls) -> ProviderInfo | None:
         return None
 
-    def generate(self, user_prompt: str, system_prompt: str | None = None) -> str | None:
+    def generate(
+        self,
+        user_prompt: str,
+        system_prompt: str | None = None,
+        max_output_tokens: int | None = None,
+    ) -> str | None:
         self.calls.append(_wanted(system_prompt))
+        self.budgets.append(max_output_tokens)
         return self.responder(len(self.calls), system_prompt)
 
 
@@ -203,3 +210,30 @@ def test_attempts_are_announced_so_a_slow_run_is_legible() -> None:
     )
     assert seen[0] == (1, 1)
     assert (2, 2) in seen
+
+
+def test_the_ask_shrinks_as_the_split_narrows() -> None:
+    """Splitting only helps a metered API if the request shrinks with it. Asking for one
+    section while still reserving a whole analysis's worth of output is the same size
+    request, and Groq refused exactly that with "Requested 19255" against an 8000 limit."""
+
+    def responder(_n: int, system: str | None) -> str | None:
+        wanted = _wanted(system)
+        return _body(wanted) if len(wanted) == 1 else None
+
+    provider = FakeProvider(responder)
+    compose_analysis(provider, "prompt", sleep=_no_sleep)
+    budgets = [b for b in provider.budgets if b is not None]
+    assert budgets[0] > budgets[-1]
+    assert budgets[-1] < budgets[0] / 4  # one section asks for a fraction of the whole
+
+
+def test_provider_clamps_an_over_large_ask_to_its_tier() -> None:
+    """max_tokens is reserved budget on a metered API, so an over-large ask is refused
+    outright rather than truncated - the request never runs."""
+    from leetvault.ai.providers import GroqProvider
+
+    groq = GroqProvider()
+    prompt_chars = 14_000  # a Hard problem: statement + code + instructions
+    budget = groq._output_budget(prompt_chars, 16384)
+    assert budget + int(prompt_chars / 3.5) <= 8000

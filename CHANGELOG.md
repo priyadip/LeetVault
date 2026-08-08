@@ -5,6 +5,22 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-08-08
+
+### Fixed
+
+- Requests no longer exceed a provider's per-minute token budget. `max_tokens` is *reserved*
+  on a metered API and counted alongside the input, so the 16384 introduced in 0.12.0 made
+  Groq refuse outright - "Requested 19255" against a limit of 8000 - where the earlier
+  truncation at least returned something. Each backend now declares its own ceiling and
+  clamps the reservation to fit the tier.
+- Splitting now shrinks the request. Narrowing to fewer sections while still reserving a
+  whole analysis's worth of output is the same size request, so escalation could run all the
+  way to eight parts and be refused identically at every step.
+- Groq's pause between calls is now 60s. Its free tier meters 8000 tokens per *minute* and
+  one analysis call reserves most of that, so a shorter gap simply moved the refusal to the
+  next call. A problem answered in a single call never waits.
+
 ## [0.12.1] - 2026-08-08
 
 ### Fixed

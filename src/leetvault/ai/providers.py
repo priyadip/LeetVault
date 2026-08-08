@@ -30,8 +30,13 @@ _TIMEOUT = 600.0  # local CPU inference on a 7B model is slow but finite
 # claims, where sampling variety buys nothing and invented detail costs everything.
 _TEMPERATURE = 0.2
 # A full analysis of a Hard problem runs past Groq's 3072-token default, which truncated
-# mid-section and produced a file that looked complete enough to keep.
+# mid-section and produced a file that looked complete enough to keep. Providers override
+# this where their tier is tighter - `max_tokens` is *reserved* budget on metered APIs, so
+# asking for more than the tier allows is rejected outright rather than merely capped.
 _MAX_TOKENS = 16384
+# Rough characters per token. Only used to keep a request inside a per-minute budget, where
+# being approximately right and slightly conservative is what matters.
+_CHARS_PER_TOKEN = 3.5
 
 
 @dataclass
@@ -47,6 +52,10 @@ class AIProvider(ABC):
 
     name: str
     default_model: str
+    # Output ceiling for one call. Overridden where a tier meters input+output together.
+    max_output_tokens: int = _MAX_TOKENS
+    # Total tokens (input + output) one request may reserve, or None when unmetered.
+    tokens_per_request: int | None = None
 
     def __init__(self, model: str | None = None) -> None:
         self.model = model or self.default_model
@@ -58,12 +67,33 @@ class AIProvider(ABC):
         """Return info if this backend is usable on this machine, else None."""
 
     @abstractmethod
-    def generate(self, user_prompt: str, system_prompt: str | None = None) -> str | None:
+    def generate(
+        self,
+        user_prompt: str,
+        system_prompt: str | None = None,
+        max_output_tokens: int | None = None,
+    ) -> str | None:
         """Return the analysis, or None if generation failed (see `last_error`).
 
         `system_prompt` lets a caller ask for part of the analysis instead of all of it,
         which is how the retry path narrows the request after a full one fails.
         """
+
+    def _output_budget(self, prompt_chars: int, requested: int | None) -> int:
+        """How many output tokens to reserve, kept inside the provider's own limit.
+
+        On a metered API `max_tokens` is reserved up front and counted against the budget
+        alongside the input, so an over-large ask is refused with a 413 rather than
+        truncated - the request never runs at all.
+        """
+        budget = requested or self.max_output_tokens
+        budget = min(budget, self.max_output_tokens)
+        if self.tokens_per_request is not None:
+            estimated_input = int(prompt_chars / _CHARS_PER_TOKEN)
+            # Leave headroom: the estimate is approximate and the limit is hard.
+            allowed = self.tokens_per_request - estimated_input - 512
+            budget = min(budget, max(allowed, 512))
+        return max(budget, 512)
 
     def _fail(self, exc: Exception) -> None:
         """Record why generation failed, preferring the API's own message.
@@ -112,8 +142,14 @@ class OllamaProvider(AIProvider):
             cost="free, unlimited",
         )
 
-    def generate(self, user_prompt: str, system_prompt: str | None = None) -> str | None:
+    def generate(
+        self,
+        user_prompt: str,
+        system_prompt: str | None = None,
+        max_output_tokens: int | None = None,
+    ) -> str | None:
         system = system_prompt or SYSTEM_PROMPT
+        budget = self._output_budget(len(system) + len(user_prompt), max_output_tokens)
         try:
             response = httpx.post(
                 f"{_OLLAMA_HOST}/api/chat",
@@ -124,7 +160,7 @@ class OllamaProvider(AIProvider):
                         {"role": "system", "content": system},
                         {"role": "user", "content": user_prompt},
                     ],
-                    "options": {"temperature": _TEMPERATURE, "num_predict": _MAX_TOKENS},
+                    "options": {"temperature": _TEMPERATURE, "num_predict": budget},
                 },
                 timeout=_TIMEOUT,
             )
@@ -162,7 +198,12 @@ class ClaudeCliProvider(AIProvider):
             cost="free with an existing Claude subscription",
         )
 
-    def generate(self, user_prompt: str, system_prompt: str | None = None) -> str | None:
+    def generate(
+        self,
+        user_prompt: str,
+        system_prompt: str | None = None,
+        max_output_tokens: int | None = None,
+    ) -> str | None:
         system = system_prompt or SYSTEM_PROMPT
         executable = self._executable()
         if executable is None:
@@ -210,8 +251,14 @@ class AnthropicProvider(AIProvider):
             cost="paid, billed per token",
         )
 
-    def generate(self, user_prompt: str, system_prompt: str | None = None) -> str | None:
+    def generate(
+        self,
+        user_prompt: str,
+        system_prompt: str | None = None,
+        max_output_tokens: int | None = None,
+    ) -> str | None:
         system = system_prompt or SYSTEM_PROMPT
+        budget = self._output_budget(len(system) + len(user_prompt), max_output_tokens)
         try:
             import anthropic
 
@@ -221,7 +268,7 @@ class AnthropicProvider(AIProvider):
             client = anthropic.Anthropic(api_key=stored) if stored else anthropic.Anthropic()
             message = client.messages.create(
                 model=self.model,
-                max_tokens=8000,
+                max_tokens=budget,
                 system=system,
                 messages=[{"role": "user", "content": user_prompt}],
             )
@@ -259,8 +306,14 @@ class GeminiProvider(AIProvider):
             cost="free tier (no local hardware needed)",
         )
 
-    def generate(self, user_prompt: str, system_prompt: str | None = None) -> str | None:
+    def generate(
+        self,
+        user_prompt: str,
+        system_prompt: str | None = None,
+        max_output_tokens: int | None = None,
+    ) -> str | None:
         system = system_prompt or SYSTEM_PROMPT
+        budget = self._output_budget(len(system) + len(user_prompt), max_output_tokens)
         key = self._key()
         if not key:
             return None
@@ -274,7 +327,7 @@ class GeminiProvider(AIProvider):
                     "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
                     "generationConfig": {
                         "temperature": _TEMPERATURE,
-                        "maxOutputTokens": _MAX_TOKENS,
+                        "maxOutputTokens": budget,
                     },
                 },
                 timeout=_TIMEOUT,
@@ -295,6 +348,11 @@ class GroqProvider(AIProvider):
     name = "groq"
     default_model = "llama-3.3-70b-versatile"
     key_env = "GROQ_API_KEY"
+    # The free tier meters input and output together at 8000 tokens/minute, and rejects a
+    # request whose reserved total exceeds it - a 16384-token ask was refused outright with
+    # "Requested 19255".
+    tokens_per_request = 8000
+    max_output_tokens = 6000
 
     @classmethod
     def _key(cls) -> str | None:
@@ -313,8 +371,14 @@ class GroqProvider(AIProvider):
             cost="free tier (no local hardware needed)",
         )
 
-    def generate(self, user_prompt: str, system_prompt: str | None = None) -> str | None:
+    def generate(
+        self,
+        user_prompt: str,
+        system_prompt: str | None = None,
+        max_output_tokens: int | None = None,
+    ) -> str | None:
         system = system_prompt or SYSTEM_PROMPT
+        budget = self._output_budget(len(system) + len(user_prompt), max_output_tokens)
         key = self._key()
         if not key:
             return None
@@ -329,7 +393,7 @@ class GroqProvider(AIProvider):
                         {"role": "user", "content": user_prompt},
                     ],
                     "temperature": _TEMPERATURE,
-                    "max_tokens": _MAX_TOKENS,
+                    "max_tokens": budget,
                 },
                 timeout=_TIMEOUT,
             )
@@ -358,7 +422,7 @@ class NvidiaProvider(AIProvider):
     # timeout on a Hard problem, and an analysis that never arrives is worth less than a
     # slightly shallower one that does.
     _REASONING_BUDGET = 6144
-    _MAX_TOKENS = 16384
+    max_output_tokens = 16384
 
     @classmethod
     def _key(cls) -> str | None:
@@ -377,8 +441,14 @@ class NvidiaProvider(AIProvider):
             cost="free tier (no local hardware needed)",
         )
 
-    def generate(self, user_prompt: str, system_prompt: str | None = None) -> str | None:
+    def generate(
+        self,
+        user_prompt: str,
+        system_prompt: str | None = None,
+        max_output_tokens: int | None = None,
+    ) -> str | None:
         system = system_prompt or SYSTEM_PROMPT
+        budget = self._output_budget(len(system) + len(user_prompt), max_output_tokens)
         key = self._key()
         if not key:
             return None
@@ -394,7 +464,7 @@ class NvidiaProvider(AIProvider):
                     ],
                     "temperature": _TEMPERATURE,
                     "top_p": 0.95,
-                    "max_tokens": self._MAX_TOKENS,
+                    "max_tokens": budget,
                     # Thinking is worth its cost here: the analysis has to trace real code
                     # and justify complexity claims, not recall a familiar answer.
                     "chat_template_kwargs": {"enable_thinking": True},
