@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-08-08
+
 ### Added
 
 - `leetvault bot --install` now performs the whole setup instead of printing instructions for
