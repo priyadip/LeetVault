@@ -483,3 +483,57 @@ def test_model_variable_is_set_only_when_pinned_locally(
     console = Console(record=True, width=200)
     run_bot(console, install=True, repo=tmp_path, show=False, manual=False)
     assert "variable LEETVAULT_AI_MODEL" in console.export_text()
+
+
+@respx.mock
+def test_ask_names_the_model_not_just_the_provider(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Provider and model are configured separately, so pairing a model with the wrong
+    backend is easy. Naming both is what makes the mismatch visible."""
+    _repo(tmp_path)
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    respx.post("https://api.groq.com/openai/v1/chat/completions").mock(
+        return_value=Response(200, json={"choices": [{"message": {"content": "An answer."}}]})
+    )
+    console = Console(record=True, width=200)
+    run_ask(
+        console,
+        problem="two-sum",
+        question="q?",
+        provider_name="groq",
+        model="openai/gpt-oss-120b",
+        repo=tmp_path,
+        save=False,
+        push=False,
+    )
+    output = console.export_text()
+    assert "groq (openai/gpt-oss-120b)" in output
+
+
+@respx.mock
+def test_a_401_explains_the_likely_model_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bot comment reading only "No answer: HTTP 401" sent the reader looking at their
+    key, when the cause was a Groq model name asked of NVIDIA."""
+    _repo(tmp_path)
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
+    respx.post("https://integrate.api.nvidia.com/v1/chat/completions").mock(
+        return_value=Response(401, json={"error": {"message": "Unauthorized"}})
+    )
+    console = Console(record=True, width=200)
+    with pytest.raises(typer.Exit):
+        run_ask(
+            console,
+            problem="two-sum",
+            question="q?",
+            provider_name="nvidia",
+            model="openai/gpt-oss-120b",
+            repo=tmp_path,
+            save=False,
+            push=False,
+        )
+    output = console.export_text()
+    assert "nvidia (openai/gpt-oss-120b)" in output
+    assert "model and provider belong together" in output
