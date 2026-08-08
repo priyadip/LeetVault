@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-08-08
+
 ### Added
 
 - The Q&A workflow honours a `LEETVAULT_AI_MODEL` repository variable, so the bot's model can
