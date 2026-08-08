@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-08-09
+
 ### Fixed
 
 - A follow-up comment no longer re-asks the question from the issue title. The title's
