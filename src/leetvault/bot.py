@@ -237,50 +237,54 @@ def _allow_workflow_writes(slug: str) -> Step:
     return Step("workflow write permission", ok, message)
 
 
-def _commit_and_push(repo_path: Path) -> Step:
+def _git(
+    repo_path: Path, args: list[str], *, credential_helper: str | None = None
+) -> tuple[int, str]:
+    prefix = ["git", "-C", str(repo_path)]
+    if credential_helper:
+        prefix += ["-c", f"credential.helper=!{credential_helper} auth git-credential"]
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed argv, paths not user-controlled
+            [*prefix, *args], capture_output=True, text=True, timeout=300, check=False
+        )
+    except Exception as exc:  # noqa: BLE001 - report, never raise
+        return 1, str(exc)
+    output = (result.stderr or result.stdout or "").strip()
+    return result.returncode, output
+
+
+def _commit_and_push(repo_path: Path, branch: str = "main") -> Step:
     """Commit the two files and push them using gh's credentials.
 
     A fine-grained PAT without the Workflows permission is refused outright when a push
     touches .github/workflows/, so the usual stored token cannot do this. gh's token can.
+
+    The push names its refspec explicitly. A bare `git push` requires the branch to have an
+    upstream, which a repository leetvault created and only ever pushed to by URL does not
+    have - it failed with git's `push.autoSetupRemote` advice, which reads like a permissions
+    problem and is not one.
     """
     executable = _gh()
     if executable is None:
         return Step("commit and push", False, "gh is not installed")
-    try:
-        subprocess.run(  # noqa: S603 - fixed argv, paths not user-controlled
-            ["git", "-C", str(repo_path), "add", ".github"], capture_output=True, check=False
-        )
-        status = subprocess.run(  # noqa: S603
-            ["git", "-C", str(repo_path), "diff", "--staged", "--quiet"],
-            capture_output=True,
-            check=False,
-        )
-        if status.returncode == 0:
-            return Step("commit and push", True, "already up to date")
-        subprocess.run(  # noqa: S603
-            ["git", "-C", str(repo_path), "commit", "-m", "leetvault: install Q&A bot"],
-            capture_output=True,
-            check=False,
-        )
-        push = subprocess.run(  # noqa: S603
-            [
-                "git",
-                "-C",
-                str(repo_path),
-                "-c",
-                f"credential.helper=!{executable} auth git-credential",
-                "push",
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except Exception as exc:  # noqa: BLE001 - report, never raise
-        return Step("commit and push", False, str(exc))
-    if push.returncode != 0:
-        tail = (push.stderr or "").strip().splitlines()
+
+    _git(repo_path, ["add", ".github"])
+    staged, _ = _git(repo_path, ["diff", "--staged", "--quiet"])
+    if staged != 0:
+        code, message = _git(repo_path, ["commit", "-m", "leetvault: install Q&A bot"])
+        if code != 0:
+            return Step("commit and push", False, message.splitlines()[-1] if message else "")
+
+    # Push unconditionally, even when there was nothing new to commit: a previous run may
+    # have committed and then failed to push, and reporting "already up to date" there would
+    # leave the workflow sitting on disk forever, never reaching GitHub.
+    code, message = _git(
+        repo_path, ["push", "origin", f"HEAD:{branch}"], credential_helper=executable
+    )
+    if code != 0:
+        tail = message.splitlines()
         return Step("commit and push", False, tail[-1] if tail else "push failed")
-    return Step("commit and push", True, "")
+    return Step("commit and push", True, "up to date" if staged == 0 else "")
 
 
 def run_bot(
@@ -363,12 +367,26 @@ def run_bot(
         )
         return
 
-    console.print(
-        f"\n[yellow]{len(failed)} step(s) need doing by hand.[/yellow] "
-        "gh needs the `repo` and `workflow` scopes - "
-        "[bold]gh auth refresh -s repo,workflow[/bold] grants both.\n"
-    )
-    _print_setup(console, provider)
+    # Only what actually failed, and only advice that matches the failure. Reprinting the
+    # whole manual checklist after five of six steps succeeded reads as though nothing
+    # worked, and blaming gh scopes for a git error sends you to the wrong settings page.
+    console.print(f"\n[yellow]{len(failed)} step(s) need doing by hand:[/yellow]")
+    for step in failed:
+        console.print(f"  - {step.name}: {step.detail}")
+
+    if any("403" in s.detail or "not accessible" in s.detail.lower() for s in failed):
+        console.print(
+            "\ngh is missing a scope - [bold]gh auth refresh -s repo,workflow[/bold] "
+            "grants both, then re-run."
+        )
+    if any(s.name == "commit and push" for s in failed):
+        console.print(
+            "\nThe files are committed locally. Push them with:\n"
+            f'  [bold]git -C "{repo_path}" push origin HEAD:main[/bold]'
+        )
+    if any(s.name.startswith(("secret", "variable")) for s in failed):
+        console.print()
+        _print_setup(console, provider)
 
 
 def _print_setup(console: Console, provider: str) -> None:
