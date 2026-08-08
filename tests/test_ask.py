@@ -201,3 +201,116 @@ def test_bot_names_the_secret_matching_the_configured_provider(tmp_path: Path) -
     console = Console(record=True, width=200)
     run_bot(console, install=False, repo=tmp_path, show=True)
     assert "NVIDIA_API_KEY" in console.export_text()
+
+
+def test_repo_slug_from_every_remote_shape() -> None:
+    from leetvault.bot import repo_slug
+
+    assert repo_slug("https://github.com/priyadip/DSA-LeetCode-.git") == "priyadip/DSA-LeetCode-"
+    assert repo_slug("git@github.com:priyadip/DSA-LeetCode-.git") == "priyadip/DSA-LeetCode-"
+    assert repo_slug("https://github.com/a/b") == "a/b"
+    assert repo_slug("nonsense") is None
+    assert repo_slug("") is None
+
+
+def test_secrets_are_passed_on_stdin_not_the_command_line(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A key in argv is visible in a process listing and in shell history. gh reads it from
+    stdin instead, so it never appears in either."""
+    import leetvault.bot as bot
+
+    calls: list[tuple[list[str], str | None]] = []
+
+    def fake_run(args: list[str], stdin: str | None = None) -> tuple[bool, str]:
+        calls.append((args, stdin))
+        return True, ""
+
+    monkeypatch.setattr(bot, "_run_gh", fake_run)
+    monkeypatch.setattr(bot, "load_provider_key", lambda p: "SECRET-VALUE", raising=False)
+    from leetvault import auth
+
+    monkeypatch.setattr(auth, "load_provider_key", lambda p: "SECRET-VALUE")
+
+    steps = bot._upload_secrets("owner/repo")
+    assert steps and all(s.ok for s in steps)
+    for args, stdin in calls:
+        assert "SECRET-VALUE" not in " ".join(args), "key leaked into argv"
+        assert stdin == "SECRET-VALUE"
+        assert args[:2] == ["secret", "set"]
+
+
+def test_every_stored_key_is_uploaded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Whichever backends you have configured should all work from the bot, not just the
+    one currently selected - switching providers should not mean redoing setup."""
+    import leetvault.bot as bot
+    from leetvault import auth
+
+    monkeypatch.setattr(bot, "_run_gh", lambda args, stdin=None: (True, ""))
+    monkeypatch.setattr(
+        auth, "load_provider_key", lambda p: "k" if p in {"gemini", "groq", "nvidia"} else None
+    )
+    names = [s.name for s in bot._upload_secrets("owner/repo")]
+    assert names == ["secret GEMINI_API_KEY", "secret GROQ_API_KEY", "secret NVIDIA_API_KEY"]
+
+
+def test_install_reports_each_step_and_survives_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A half-finished setup must say which half, not just fail."""
+    import leetvault.bot as bot
+    from leetvault import auth
+
+    ConfigStore().set("repo_url", "https://github.com/owner/repo.git")
+    ConfigStore().set("ai_provider", "groq")
+    monkeypatch.setattr(bot, "_gh", lambda: "/usr/bin/gh")
+    monkeypatch.setattr(auth, "load_provider_key", lambda p: "k" if p == "groq" else None)
+
+    def fake_run(args: list[str], stdin: str | None = None) -> tuple[bool, str]:
+        if args[0] == "auth":
+            return True, "logged in"
+        if args[0] == "variable":
+            return False, "HTTP 403: Resource not accessible"
+        return True, ""
+
+    monkeypatch.setattr(bot, "_run_gh", fake_run)
+    monkeypatch.setattr(bot, "_commit_and_push", lambda p: bot.Step("commit and push", True))
+
+    console = Console(record=True, width=200)
+    run_bot(console, install=True, repo=tmp_path, show=False, manual=False)
+    output = console.export_text()
+    assert "OK" in output and "FAIL" in output
+    assert "403" in output
+    assert "gh auth refresh -s repo,workflow" in output
+    assert (tmp_path / WORKFLOW_PATH).exists()  # files still written
+
+
+def test_manual_mode_touches_nothing_on_github(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import leetvault.bot as bot
+
+    def explode(*args: object, **kwargs: object) -> tuple[bool, str]:
+        raise AssertionError("--manual must not call gh")
+
+    monkeypatch.setattr(bot, "_run_gh", explode)
+    console = Console(record=True, width=200)
+    run_bot(console, install=True, repo=tmp_path, show=False, manual=True)
+    assert (tmp_path / WORKFLOW_PATH).exists()
+    assert "Manual setup" in console.export_text()
+
+
+def test_install_falls_back_when_gh_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without gh the files are still written and the manual steps printed - the feature
+    degrades rather than disappearing."""
+    import leetvault.bot as bot
+
+    monkeypatch.setattr(bot, "_gh", lambda: None)
+    console = Console(record=True, width=200)
+    run_bot(console, install=True, repo=tmp_path, show=False, manual=False)
+    output = console.export_text()
+    assert (tmp_path / WORKFLOW_PATH).exists()
+    assert "not installed" in output
+    assert "Manual setup" in output

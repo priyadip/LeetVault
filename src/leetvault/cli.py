@@ -215,6 +215,9 @@ def bot(
     ),
     repo: Path | None = typer.Option(None, "--repo", help="Repository to install into."),
     show: bool = typer.Option(False, "--show", help="Print the setup steps and exit."),
+    manual: bool = typer.Option(
+        False, "--manual", help="Only write the files; do not touch GitHub settings."
+    ),
 ) -> None:
     """Set up a GitHub bot that answers questions asked as issues.
 
@@ -224,7 +227,7 @@ def bot(
     """
     from leetvault.bot import run_bot
 
-    run_bot(console, install=install, repo=repo, show=show)
+    run_bot(console, install=install, repo=repo, show=show, manual=manual)
 
 
 @app.command()
