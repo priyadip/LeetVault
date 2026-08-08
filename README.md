@@ -223,7 +223,9 @@ issue titled
 > `[two-sum]: why a hash map?`
 
 and the bot replies as a comment and commits the exchange to `Problems/two-sum/qa.md`.
-Replying in the thread asks a follow-up. It works from a phone, since it is just GitHub.
+Replying in the thread asks a follow-up: the comment is the question, and the existing
+`qa.md` is fed back in as context, so "why?" or "show me that trace" makes sense on its own.
+It works from a phone, since it is just GitHub.
 
 `gh` is used rather than the REST API for two reasons: uploading a secret means encrypting it
 with the repository's public key, which would otherwise mean a new dependency, and `gh`'s

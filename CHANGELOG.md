@@ -5,6 +5,13 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A follow-up comment no longer re-asks the question from the issue title. The title's
+  question is answered when the issue is opened, so merging it into every later comment had
+  the model answer it again alongside the new one. On a comment the body is the question;
+  the title only names the problem.
+
 ## [0.16.0] - 2026-08-09
 
 ### Fixed
