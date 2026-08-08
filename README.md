@@ -39,6 +39,10 @@ leetvault watch                                             # or: poll automatic
 - `leetvault logout` — remove stored credentials.
 - `leetvault config` — get/set persistent configuration (repo URL, DB path, dedup window, ...).
 - `leetvault ai` — set up optional AI-generated solution analysis (**off by default**).
+- `leetvault analyze [problem]` — regenerate an existing `analysis.md` with a different
+  backend — see [below](#redoing-an-analysis).
+- `leetvault commands [--full]` — list every command and what it does, generated from the CLI
+  itself so it cannot fall behind.
 
 ### Refreshing credentials
 
@@ -67,24 +71,56 @@ It works with whichever backend you already have; run `leetvault ai` and it dete
 | Backend | Cost | Needs | Notes |
 |---|---|---|---|
 | **Gemini** | Free tier | Free API key | [aistudio.google.com/apikey](https://aistudio.google.com/apikey). No local hardware, no subscription. |
-| **Groq** | Free tier | Free API key | [console.groq.com/keys](https://console.groq.com/keys). Very fast; no local hardware. |
+| **Groq** | Free tier | Free API key | [console.groq.com/keys](https://console.groq.com/keys). Very fast; no local hardware. Meters 8000 tokens/min. |
+| **NVIDIA NIM** | Free tier | Free API key | [build.nvidia.com](https://build.nvidia.com). Very large open models with reasoning; quota separate from Gemini and Groq. |
 | **Ollama** (local) | Free, unlimited | ~5 GB disk + RAM | `ollama pull qwen2.5-coder:7b`. Fully offline, no account. Slow without a GPU. |
 | **Claude Code CLI** | Free | An existing Claude subscription | `npm i -g @anthropic-ai/claude-code`, then `claude` once to sign in. |
 | **Anthropic API** | Paid, per token | API key | `pip install anthropic`. Highest quality. |
 
-**Gemini and Groq are the fallback when you have neither spare RAM nor a Claude
-subscription** — a free API key, and inference runs in the cloud.
+**Gemini, Groq and NVIDIA NIM are the fallback when you have neither spare RAM nor a Claude
+subscription** — a free API key, and inference runs in the cloud. Their quotas are separate,
+so a backfill stopped by one provider's daily limit can be finished on another.
+
+For **Hard** problems, prefer a reasoning-capable model. Tracing code and justifying
+complexity is multi-step arithmetic, and a mid-size instruct model will produce a confident,
+wrong dry run rather than admitting it cannot follow the code.
 
 ```bash
 leetvault ai                      # detect backends and choose one
-leetvault ai --set-key gemini     # store a free Gemini key (or groq / anthropic)
+leetvault ai --set-key gemini     # store a free key (or groq / nvidia / anthropic)
 leetvault ai --show               # print current settings
 leetvault ai --disable            # turn it back off
 leetvault config ai_model llama-3.3-70b-versatile   # override the model
 ```
 
-Generation is best-effort — a failing or slow model never breaks a sync, and analysis is
-written once per problem, never regenerated.
+Generation is best-effort: a failing or slow model never breaks a sync. `sync` only fills
+gaps — a problem that already has an `analysis.md` is skipped, which is what makes a backfill
+resumable across a free tier's daily limit. To replace one you are not happy with, use
+[`leetvault analyze`](#redoing-an-analysis).
+
+Each file's footer records the model that wrote it, so a repo built across several providers
+stays traceable.
+
+#### How an analysis is assembled
+
+leetvault asks for the whole analysis in one call and keeps that when it comes back complete.
+If the reply is truncated or missing sections, it re-requests them in halves, then pairs, then
+one section at a time, pausing between calls so a per-minute token budget is not spent in one
+shot. A partial analysis is never written — a file that exists is a problem that never gets
+looked at again.
+
+### Redoing an analysis
+
+```bash
+leetvault analyze --list                  # which model wrote each analysis
+leetvault analyze two-sum -p nvidia       # redo one problem
+leetvault analyze --from groq -p nvidia   # redo everything Groq wrote
+leetvault analyze --all -p gemini         # redo the lot, one model throughout
+```
+
+Name a problem by slug, number, or part of its title. You are asked before anything is
+overwritten (`-y` skips that), and if the new provider fails, the existing analysis is kept
+rather than lost.
 
 ### `--keep-all`
 
@@ -152,6 +188,15 @@ statements remain the property of LeetCode; each file notes this.
 Deduplicated by default within a 24h window — see [`--keep-all`](#--keep-all) above to change
 that.
 
+## Discovering commands
+
+```bash
+leetvault commands          # every command and what it does
+leetvault commands --full   # plus every argument and option
+```
+
+Generated from the CLI itself, so it cannot fall behind the commands that actually exist.
+
 ## Honest limits
 
 - `watch` is polling (default 90s, configurable), not a real-time push — LeetCode has no public
@@ -162,6 +207,10 @@ that.
   at your own risk, against your own account only.
 - LeetCode has no official API — every endpoint leetvault uses is reverse-engineered and could
   change without notice.
+- AI analysis is only as good as the model behind it. leetvault checks that a response is
+  complete and rejects truncated or stub replies, but it cannot verify that a dry run or a
+  complexity claim is *correct* — read generated analysis as a strong draft, not an authority,
+  and prefer a reasoning-capable model for Hard problems.
 
 ## Docs
 

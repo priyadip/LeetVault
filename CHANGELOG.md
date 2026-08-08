@@ -5,6 +5,14 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The README documents `analyze`, `commands`, the NVIDIA NIM backend, and how an analysis is
+  assembled - all of which had shipped without reaching it. It also no longer claims analysis
+  is "written once per problem, never regenerated", which `analyze` made untrue. Tests now
+  check every registered command and every AI backend against the README, so the docs cannot
+  drift behind the CLI unnoticed.
+
 ## [0.12.0] - 2026-08-08
 
 ### Changed

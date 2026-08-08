@@ -100,3 +100,29 @@ def test_global_flags_are_listed_too() -> None:
     # click supplies --help implicitly, so it is absent from group.params and has to be
     # added deliberately - exactly the kind of omission this command exists to prevent.
     assert "--help" in output
+
+
+def test_readme_documents_every_command() -> None:
+    """The README drifted behind the CLI twice: `analyze` and `commands` both shipped
+    without reaching it, and two edits meant to fix that silently matched nothing because
+    they targeted "## Licence" against a file spelling it "## License". Checking against
+    the live app is the only version of this that stays true."""
+    from pathlib import Path
+
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+    for name in _registered():
+        assert f"leetvault {name}" in readme, f"README does not mention `leetvault {name}`"
+
+
+def test_readme_lists_every_ai_backend() -> None:
+    """A backend nobody knows about is a backend nobody uses - and the quotas are separate,
+    which is the whole reason to have several."""
+    from pathlib import Path
+
+    from leetvault.ai import provider_names
+
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+    aliases = {"claude-cli": "Claude Code CLI", "nvidia": "NVIDIA", "anthropic": "Anthropic"}
+    for name in provider_names():
+        needle = aliases.get(name, name)
+        assert needle.lower() in readme.lower(), f"README does not mention the {name} backend"
