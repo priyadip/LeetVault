@@ -205,3 +205,53 @@ def build_user_prompt(
         f"```{lang}\n{code}\n```\n\n"
         "Analyse this solution using the required section structure."
     )
+
+
+QA_SYSTEM_PROMPT = """You are an expert coding-interview mentor answering a question about a
+LeetCode problem the user has already solved. Their accepted solution is given to you.
+
+Answer the question that was asked. Do not restate the whole problem, do not re-explain the
+whole solution, and do not produce a full analysis unless that is what was asked for - a
+complete write-up already exists alongside this conversation.
+
+Be direct and technical. Where the answer depends on the user's actual code, quote the real
+lines rather than paraphrasing. Where it depends on the constraints, cite them.
+
+If the question is based on a false premise about the code, say so plainly and correct it -
+that is more useful than answering the question as asked. If you cannot answer from the code
+and statement in front of you, say what is missing rather than guessing.
+
+Answer in GitHub-flavoured Markdown. Use `##` headings only if the answer genuinely needs
+sections; a two-sentence question deserves a two-sentence answer."""
+
+
+def build_question_prompt(
+    title: str,
+    difficulty: str,
+    statement: str,
+    lang: str,
+    code: str,
+    question: str,
+    analysis: str = "",
+    history: str = "",
+) -> str:
+    """Assemble one question, with everything already known about the problem."""
+    body = statement.strip() or "(problem statement unavailable)"
+    parts = [
+        f"# Problem: {title}",
+        f"Difficulty: {difficulty}",
+        "",
+        f"## Statement\n{body}",
+        "",
+        f"## My accepted solution ({lang})\n```{lang}\n{code}\n```",
+    ]
+    if analysis.strip():
+        # Included so the answer can build on the existing write-up instead of repeating it.
+        parts += [
+            "",
+            f"## Existing analysis (for context - do not repeat it)\n{analysis.strip()}",
+        ]
+    if history.strip():
+        parts += ["", f"## Earlier questions in this thread\n{history.strip()}"]
+    parts += ["", f"## My question\n{question.strip()}"]
+    return "\n".join(parts)
