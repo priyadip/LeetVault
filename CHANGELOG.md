@@ -5,6 +5,16 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- `leetvault bot --install` now performs the whole setup instead of printing instructions for
+  it. Using the GitHub CLI it uploads every stored API key as an encrypted repository secret,
+  sets the provider variable, grants the workflow permission to commit, and pushes the
+  workflow - a push a fine-grained PAT cannot make, since GitHub refuses one touching
+  `.github/workflows/` without the Workflows permission. Each step is reported individually,
+  the files are still written if GitHub cannot be reached, and `--manual` skips the GitHub
+  calls entirely.
+
 ## [0.13.0] - 2026-08-08
 
 ### Added
