@@ -542,3 +542,54 @@ def test_a_401_explains_the_likely_model_mismatch(
     output = console.export_text()
     assert "nvidia (openai/gpt-oss-120b)" in output
     assert "model and provider belong together" in output
+
+
+def test_issue_form_placeholder_is_not_treated_as_the_question() -> None:
+    """GitHub writes "_No response_" into a blank form field. It is not empty, so naive
+    truthiness preferred it over the real question in the title - and the bot replied by
+    asking what the user wanted to know."""
+    from leetvault.bot import parse_issue
+
+    problem, question = parse_issue(
+        "[3348]: is this really greedy?", "### Question\n\n_No response_"
+    )
+    assert problem == "3348"
+    assert question == "is this really greedy?"
+
+
+def test_slugs_containing_hyphens_survive_the_split() -> None:
+    """A hyphen is both part of a slug and a plausible separator, so `two-sum` must stay
+    whole while `3348 - explain` splits."""
+    from leetvault.bot import parse_issue
+
+    assert parse_issue("[two-sum]: why a hash map?", "")[0] == "two-sum"
+    assert parse_issue("two-sum", "")[0] == "two-sum"
+    assert parse_issue("smallest-divisible-digit-product-ii", "")[0] == (
+        "smallest-divisible-digit-product-ii"
+    )
+    assert parse_issue("3348 - explain", "") == ("3348", "explain")
+
+
+def test_question_from_title_and_body_are_both_kept() -> None:
+    """Either place is legitimate - the template's example uses the title, the form offers
+    a body - so neither should silently win when both carry something."""
+    from leetvault.bot import parse_issue
+
+    _, question = parse_issue("[3348]: is this greedy?", "### Question\n\nAnd its complexity?")
+    assert "is this greedy?" in question
+    assert "And its complexity?" in question
+
+
+def test_a_title_with_no_question_still_asks_something() -> None:
+    from leetvault.bot import parse_issue
+
+    assert parse_issue("two-sum", "")[1] == "Explain this solution."
+
+
+def test_workflow_delegates_parsing_to_the_tested_function() -> None:
+    """The bug shipped because the logic lived inline in YAML, where no test could reach
+    it. Keep it in the package."""
+    from leetvault.bot import WORKFLOW
+
+    assert "from leetvault.bot import parse_issue" in WORKFLOW
+    assert "re.match" not in WORKFLOW
