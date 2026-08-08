@@ -114,6 +114,11 @@ def test_push_wraps_git_command_error_and_scrubs_pat(
     pat = "ghp_supersecret"
 
     class _FailingGit:
+        def fetch(self, url: str, branch: str) -> None:
+            # No such branch on the remote: the normal first-push case, which push()
+            # tolerates so it can go on to the push that this test is about.
+            raise GitCommandError(["git", "fetch", url, branch], 128, stderr="not found")
+
         def push(self, url: str, refspec: str) -> None:
             raise GitCommandError(["git", "push", url, refspec], 1, stderr=f"denied for {pat}")
 

@@ -5,6 +5,20 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Pushing no longer fails when the remote has moved on. The Q&A bot commits answers from a
+  CI runner, so the repository now has a second writer and the local clone is routinely
+  behind - git refuses a non-fast-forward push, which surfaced as "Note about
+  fast-forwards". `sync`, `import`, `watch` and `bot --install` now rebase onto the remote
+  first. A rebase that genuinely conflicts is aborted and reported rather than leaving the
+  repository mid-rebase.
+- The Q&A workflow serialises its runs and rebases before pushing, retrying briefly. Two
+  questions asked close together raced to commit `qa.md`, and nothing coordinated the job
+  with a `leetvault sync` pushing from a laptop while it worked.
+- An error raised when no PAT is set is readable again. Scrubbing an empty PAT replaced the
+  gap between every character, turning the message into a wall of asterisks.
+
 ## [0.15.3] - 2026-08-09
 
 ### Fixed

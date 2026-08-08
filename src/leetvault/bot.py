@@ -48,6 +48,13 @@ permissions:
   contents: write
   issues: write
 
+# One at a time. Two questions asked close together would otherwise race to commit qa.md,
+# and the loser's push is refused. Queue rather than cancel - cancelling would silently
+# drop an answer the user is waiting for.
+concurrency:
+  group: leetvault-qa
+  cancel-in-progress: false
+
 jobs:
   answer:
     # Only the repository owner. Anyone can open an issue on a public repo, and every one
@@ -125,10 +132,19 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "Problems/*/qa.md" || true
-          git diff --staged --quiet || {
-            git commit -m "leetvault: answer issue #${{ github.event.issue.number }}"
-            git push
-          }
+          git diff --staged --quiet && exit 0
+          git commit -m "leetvault: answer issue #${{ github.event.issue.number }}"
+          # Rebase before pushing and retry: a local `leetvault sync` may have pushed while
+          # this job was thinking, and a bare push is refused as a non-fast-forward. The
+          # concurrency group above keeps two of these jobs apart, but nothing coordinates
+          # this job with a push from someone's laptop.
+          for attempt in 1 2 3; do
+            git pull --rebase --autostash origin "${GITHUB_REF_NAME}" || git rebase --abort || true
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then exit 0; fi
+            sleep $((attempt * 5))
+          done
+          echo "::error::Could not push the Q&A log after 3 attempts."
+          exit 1
 """
 
 ISSUE_TEMPLATE = """name: Ask about a problem
@@ -335,6 +351,20 @@ def _commit_and_push(repo_path: Path, branch: str = "main") -> Step:
         code, message = _git(repo_path, ["commit", "-m", "leetvault: install Q&A bot"])
         if code != 0:
             return Step("commit and push", False, message.splitlines()[-1] if message else "")
+
+    # Rebase onto the remote first. The bot itself commits answers from CI, so the local
+    # clone is behind after every question answered, and git refuses a non-fast-forward
+    # push. Failure here is not fatal - the push below reports it properly.
+    if _git(repo_path, ["fetch", "origin", branch], credential_helper=executable)[0] == 0:
+        code, message = _git(repo_path, ["rebase", f"origin/{branch}"])
+        if code != 0:
+            _git(repo_path, ["rebase", "--abort"])
+            return Step(
+                "commit and push",
+                False,
+                "local and remote history diverged and could not be replayed; "
+                "resolve it in the repo by hand, then re-run",
+            )
 
     # Push unconditionally, even when there was nothing new to commit: a previous run may
     # have committed and then failed to push, and reporting "already up to date" there would
