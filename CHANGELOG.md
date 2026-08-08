@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.15.2] - 2026-08-09
+
 ### Fixed
 
 - `bot --install` uploaded every API key as the literal string `-` rather than the key. gh
