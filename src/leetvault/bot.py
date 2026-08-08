@@ -88,8 +88,13 @@ jobs:
           python - <<'PY' >> "$GITHUB_OUTPUT"
           import os
           from leetvault.bot import parse_issue
-          body = os.environ.get("COMMENT_BODY") or os.environ.get("ISSUE_BODY") or ""
-          problem, question = parse_issue(os.environ.get("ISSUE_TITLE", ""), body)
+          comment = os.environ.get("COMMENT_BODY") or ""
+          body = comment or os.environ.get("ISSUE_BODY") or ""
+          # On a follow-up the title's question was already answered; only the comment is
+          # the new question.
+          problem, question = parse_issue(
+              os.environ.get("ISSUE_TITLE", ""), body, is_comment=bool(comment)
+          )
           print(f"problem={problem}")
           print("question<<EOF")
           print(question)
@@ -244,17 +249,23 @@ def _meaningful(text: str) -> str:
     return "\n".join(kept).strip()
 
 
-def parse_issue(title: str, body: str) -> tuple[str, str]:
+def parse_issue(title: str, body: str, *, is_comment: bool = False) -> tuple[str, str]:
     """Work out which problem an issue is about, and what it asks.
 
-    The question can live in either place. The issue template's own example puts it in the
-    title, while the form offers a body field, so both have to work - and when both carry
-    something, both are kept rather than one silently winning.
+    On the opening issue the question may be in either place - the template's example puts
+    it in the title, the form offers a body field - so both are used, and when both carry
+    something neither is dropped.
+
+    A follow-up comment is different. The title still names the problem, but its question
+    has already been answered; merging it in would have the model answer the original
+    question again alongside the new one.
     """
     problem, from_title = _split_title(title)
     from_body = _meaningful(body)
 
-    if from_title and from_body:
+    if is_comment:
+        question = from_body
+    elif from_title and from_body:
         question = f"{from_title}\n\n{from_body}"
     else:
         question = from_body or from_title

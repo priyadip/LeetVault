@@ -621,3 +621,38 @@ def test_workflow_rebases_and_retries_its_own_push() -> None:
     )
     assert "pull --rebase" in commit_step
     assert "for attempt in" in commit_step, "a single attempt loses any race it enters"
+
+
+def test_a_follow_up_comment_does_not_re_ask_the_title_question() -> None:
+    """The title's question was answered when the issue was opened. Merging it into every
+    follow-up would have the model answer it again alongside the new question."""
+    from leetvault.bot import parse_issue
+
+    problem, question = parse_issue(
+        "[3348]: is this really greedy?",
+        "Why is BFS needed instead of plain DP?",
+        is_comment=True,
+    )
+    assert problem == "3348"
+    assert question == "Why is BFS needed instead of plain DP?"
+    assert "greedy" not in question
+
+
+def test_the_opening_issue_still_uses_both_places() -> None:
+    from leetvault.bot import parse_issue
+
+    _, question = parse_issue("[3348]: is this greedy?", "And what is the complexity?")
+    assert "is this greedy?" in question
+    assert "And what is the complexity?" in question
+
+
+def test_an_empty_follow_up_still_asks_something() -> None:
+    from leetvault.bot import parse_issue
+
+    assert parse_issue("[two-sum]: why?", "", is_comment=True)[1] == "Explain this solution."
+
+
+def test_workflow_marks_comments_as_follow_ups() -> None:
+    from leetvault.bot import WORKFLOW
+
+    assert "is_comment=bool(comment)" in WORKFLOW
