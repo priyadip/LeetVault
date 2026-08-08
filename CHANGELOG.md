@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-08-09
+
 ### Fixed
 
 - `ask` names the model it is using, not just the provider, and says what a 401 or 404
