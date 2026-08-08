@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-08-08
+
 ### Added
 
 - `leetvault ask <problem> "<question>"` - ask a question about one of your solutions and
