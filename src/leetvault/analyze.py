@@ -221,9 +221,14 @@ def run_analyze(
             q_path = question_md_path(repo_path, row.title_slug)
             statement = q_path.read_text(encoding="utf-8") if q_path.exists() else ""
 
+            def note(split: int, groups: int) -> None:
+                stage = "whole analysis" if split == 1 else f"{groups} parts"
+                progress.update(task, description=f"Re-analysing via {chosen} ({stage})")
+
             result = compose_analysis(
                 provider,
                 build_user_prompt(row.title, row.difficulty, row.topics, statement, lang, code),
+                on_attempt=note,
             )
             body = result.body
             if body:

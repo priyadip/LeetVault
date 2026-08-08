@@ -583,8 +583,16 @@ def _generate_ai_analysis(console: Console, factory: sessionmaker[Session], repo
             if q_path.exists():
                 statement = q_path.read_text(encoding="utf-8")
 
+            def note(split: int, groups: int) -> None:
+                # Escalation can take minutes per attempt. Without saying which one is
+                # running, a slow model is indistinguishable from a wedged one.
+                stage = "whole analysis" if split == 1 else f"{groups} parts"
+                progress.update(task, description=f"Analysing solutions ({stage})")
+
             result = compose_analysis(
-                provider, build_user_prompt(title, difficulty, topics, statement, lang, code)
+                provider,
+                build_user_prompt(title, difficulty, topics, statement, lang, code),
+                on_attempt=note,
             )
             if result.body:
                 write_analysis_md(repo_path, meta, result.body, str(provider_name), provider.model)

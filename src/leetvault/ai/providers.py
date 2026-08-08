@@ -353,9 +353,12 @@ class NvidiaProvider(AIProvider):
     default_model = "nvidia/nemotron-3-ultra-550b-a55b"
     key_env = "NVIDIA_API_KEY"
     # Reasoning models spend tokens thinking before they answer, and a full analysis is
-    # long, so the ceiling has to cover both or the response is truncated mid-section.
-    _REASONING_BUDGET = 16384
-    _MAX_TOKENS = 32768
+    # long, so the ceiling has to cover both or the response is truncated mid-section. But
+    # tokens are wall-clock here: at 16384 this 550B model ran past a ten-minute per-call
+    # timeout on a Hard problem, and an analysis that never arrives is worth less than a
+    # slightly shallower one that does.
+    _REASONING_BUDGET = 6144
+    _MAX_TOKENS = 16384
 
     @classmethod
     def _key(cls) -> str | None:

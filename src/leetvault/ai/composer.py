@@ -42,6 +42,12 @@ _DELAYS: dict[str, float] = {
 }
 _DEFAULT_DELAY = 5.0
 
+# Ceiling on the time one problem may consume, across every attempt. Escalation multiplies
+# calls, and a large reasoning model can spend ten minutes on a single Hard problem, so the
+# worst case without a ceiling is hours on one file with no way to tell whether it is
+# working or wedged. Stopping and saying so is more useful than either.
+_PROBLEM_BUDGET_SECONDS = 900.0
+
 
 def delay_for(provider_name: str) -> float:
     return _DELAYS.get(provider_name, _DEFAULT_DELAY)
@@ -98,6 +104,8 @@ def compose_analysis(
     delay: float | None = None,
     sleep: Callable[[float], None] = time.sleep,
     on_attempt: Callable[[int, int], None] | None = None,
+    budget_seconds: float = _PROBLEM_BUDGET_SECONDS,
+    now: Callable[[], float] = time.monotonic,
 ) -> ComposeResult:
     """Produce a full analysis, narrowing the request until it succeeds.
 
@@ -108,8 +116,18 @@ def compose_analysis(
     pause = delay_for(provider.name) if delay is None else delay
     calls = 0
     last_error: str | None = None
+    started = now()
+
+    def out_of_time() -> bool:
+        return budget_seconds > 0 and (now() - started) >= budget_seconds
 
     for split in _SPLITS:
+        if out_of_time():
+            last_error = (
+                f"gave up after {budget_seconds:.0f}s and {calls} call(s) - the model is "
+                "too slow for this problem; try a faster one"
+            )
+            break
         groups = _chunk(SECTION_NAMES, split)
         if on_attempt is not None:
             on_attempt(split, len(groups))
@@ -117,6 +135,13 @@ def compose_analysis(
         collected: list[str] = []
         ok = True
         for index, group in enumerate(groups):
+            if out_of_time():
+                ok = False
+                last_error = (
+                    f"gave up after {budget_seconds:.0f}s and {calls} call(s) - the model is "
+                    "too slow for this problem; try a faster one"
+                )
+                break
             if calls and pause:
                 sleep(pause)
             system = build_system_prompt(group if split > 1 else None)

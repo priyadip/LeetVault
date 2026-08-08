@@ -156,3 +156,50 @@ def test_delay_is_longest_for_the_tightest_free_tier() -> None:
     assert delay_for("ollama") == 0.0
     assert delay_for("groq") > delay_for("nvidia")
     assert delay_for("unknown-provider") > 0
+
+
+def test_gives_up_when_the_time_budget_runs_out() -> None:
+    """Escalation multiplies calls, and a large reasoning model can spend ten minutes on one
+    Hard problem. Without a ceiling the worst case is hours on a single file."""
+    clock = iter([0.0, 0.0, 100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0])
+    provider = FakeProvider(lambda _n, _s: None)
+    result = compose_analysis(
+        provider,
+        "prompt",
+        sleep=_no_sleep,
+        budget_seconds=250.0,
+        now=lambda: next(clock),
+    )
+    assert result.body is None
+    assert "gave up after" in (result.error or "")
+    # Stopped early rather than working through every split.
+    assert len(provider.calls) < 4
+
+
+def test_budget_does_not_interrupt_a_run_that_succeeds() -> None:
+    provider = FakeProvider(lambda _n, _s: _body(SECTION_NAMES))
+    result = compose_analysis(
+        provider, "prompt", sleep=_no_sleep, budget_seconds=1.0, now=lambda: 0.0
+    )
+    assert result.body is not None
+    assert result.calls == 1
+
+
+def test_attempts_are_announced_so_a_slow_run_is_legible() -> None:
+    """An 11-minute progress bar with no detail is indistinguishable from a hang."""
+    seen: list[tuple[int, int]] = []
+
+    def responder(_n: int, system: str | None) -> str:
+        wanted = _wanted(system)
+        if len(wanted) == len(SECTION_NAMES):
+            return _body(SECTION_NAMES[:3])
+        return _body(wanted)
+
+    compose_analysis(
+        FakeProvider(responder),
+        "prompt",
+        sleep=_no_sleep,
+        on_attempt=lambda split, groups: seen.append((split, groups)),
+    )
+    assert seen[0] == (1, 1)
+    assert (2, 2) in seen

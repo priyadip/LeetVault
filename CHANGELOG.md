@@ -5,6 +5,21 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-08-08
+
+### Fixed
+
+- One problem can no longer consume unbounded time. Escalating across splits multiplies
+  calls, and a large reasoning model can spend ten minutes on a single Hard problem, so the
+  worst case was hours on one file with no way to tell working from wedged. There is now a
+  15-minute ceiling per problem, after which it stops and says the model is too slow.
+- The progress bar names the attempt it is on - "whole analysis", then "2 parts", "4 parts",
+  "8 parts" - so a slow run is legible rather than looking like a hang.
+- NVIDIA's reasoning budget drops from 16384 to 6144 tokens (and its output cap from 32768
+  to 16384). At the old setting `nemotron-3-ultra-550b` ran past the ten-minute per-call
+  timeout on a Hard problem; an analysis that never arrives is worth less than a slightly
+  shallower one that does.
+
 ### Fixed
 
 - The README documents `analyze`, `commands`, the NVIDIA NIM backend, and how an analysis is
