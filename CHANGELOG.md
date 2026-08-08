@@ -5,6 +5,15 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- The Q&A workflow honours a `LEETVAULT_AI_MODEL` repository variable, so the bot's model can
+  be changed without reinstalling. Previously only the provider was configurable and each
+  provider's default applied - for Groq that is `llama-3.3-70b-versatile`, which is not a
+  reasoning model. The flag is passed only when the variable is set, so an unset one leaves
+  each provider on its own default. `bot --install` uploads a locally pinned `ai_model`
+  alongside the provider.
+
 ## [0.14.1] - 2026-08-08
 
 ### Fixed

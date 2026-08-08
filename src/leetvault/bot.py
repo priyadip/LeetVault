@@ -96,10 +96,14 @@ jobs:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
+          # --model is passed only when set. An empty one would override the provider's
+          # own default with nothing, and those defaults differ per provider.
+          ARGS=(--provider "${{ vars.LEETVAULT_AI_PROVIDER || 'gemini' }}")
+          MODEL="${{ vars.LEETVAULT_AI_MODEL }}"
+          if [ -n "$MODEL" ]; then ARGS+=(--model "$MODEL"); fi
           leetvault ask "${{ steps.ask.outputs.problem }}" \\
             "${{ steps.ask.outputs.question }}" \\
-            --provider "${{ vars.LEETVAULT_AI_PROVIDER || 'gemini' }}" \\
-            --repo . --no-push | tee /tmp/answer.txt
+            "${ARGS[@]}" --repo . --no-push | tee /tmp/answer.txt
 
       - name: Comment with the answer
         uses: actions/github-script@v7
@@ -215,11 +219,11 @@ def _upload_secrets(slug: str) -> list[Step]:
     return steps
 
 
-def _set_variable(slug: str, provider: str) -> Step:
-    ok, message = _run_gh(
-        ["variable", "set", "LEETVAULT_AI_PROVIDER", "--repo", slug, "--body", provider]
-    )
-    return Step("variable LEETVAULT_AI_PROVIDER", ok, message)
+def _set_variable(slug: str, name: str, value: str) -> Step:
+    """Set a repository variable. Unlike a secret this is plain text and readable in the
+    settings UI, which is right for a provider or model name and wrong for a key."""
+    ok, message = _run_gh(["variable", "set", name, "--repo", slug, "--body", value])
+    return Step(f"variable {name}", ok, message)
 
 
 def _allow_workflow_writes(slug: str) -> Step:
@@ -344,10 +348,14 @@ def run_bot(
     console.print(f"[bold]Setting up {slug}[/bold]\n")
     steps = [
         *_upload_secrets(slug),
-        _set_variable(slug, provider),
-        _allow_workflow_writes(slug),
-        _commit_and_push(repo_path),
+        _set_variable(slug, "LEETVAULT_AI_PROVIDER", provider),
     ]
+    # Only when a model is pinned locally. Left unset, each provider uses its own default,
+    # which is what an install that has never chosen a model should do.
+    model = str(store.get("ai_model") or "")
+    if model:
+        steps.append(_set_variable(slug, "LEETVAULT_AI_MODEL", model))
+    steps += [_allow_workflow_writes(slug), _commit_and_push(repo_path)]
 
     for step in steps:
         if step.ok:
