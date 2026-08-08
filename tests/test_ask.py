@@ -167,7 +167,8 @@ def test_bot_installs_a_valid_workflow(tmp_path: Path) -> None:
     assert workflow.exists()
     assert (tmp_path / TEMPLATE_PATH).exists()
 
-    yaml = pytest.importorskip("yaml")
+    import yaml
+
     parsed = yaml.safe_load(workflow.read_text(encoding="utf-8"))
     assert "jobs" in parsed
     assert parsed["jobs"]["answer"]["runs-on"] == "ubuntu-latest"
