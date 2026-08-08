@@ -509,7 +509,7 @@ def _generate_ai_analysis(console: Console, factory: sessionmaker[Session], repo
     if not provider_name:
         return 0
 
-    from leetvault.ai import build_user_prompt, get_provider
+    from leetvault.ai import build_user_prompt, compose_analysis, get_provider
 
     provider = get_provider(str(provider_name), store.get("ai_model"))
     if provider is None:
@@ -583,18 +583,14 @@ def _generate_ai_analysis(console: Console, factory: sessionmaker[Session], repo
             if q_path.exists():
                 statement = q_path.read_text(encoding="utf-8")
 
-            body = provider.generate(
-                build_user_prompt(title, difficulty, topics, statement, lang, code)
+            result = compose_analysis(
+                provider, build_user_prompt(title, difficulty, topics, statement, lang, code)
             )
-            if body and _looks_like_analysis(body):
-                write_analysis_md(repo_path, meta, body, str(provider_name), provider.model)
+            if result.body:
+                write_analysis_md(repo_path, meta, result.body, str(provider_name), provider.model)
                 written += 1
             else:
-                if body:
-                    provider.last_error = (
-                        f"model returned {len(body)} chars with no section headings "
-                        "(truncated or refused)"
-                    )
+                provider.last_error = result.error or provider.last_error
                 failed += 1
                 last_error = provider.last_error or last_error
                 # One backend that is down fails identically for every problem. Stop after a
@@ -624,8 +620,16 @@ def _generate_ai_analysis(console: Console, factory: sessionmaker[Session], repo
 
 
 def _looks_like_analysis(body: str) -> bool:
-    """Whether a model response is a real analysis rather than a stub or a truncation."""
-    return sum(1 for line in body.splitlines() if line.startswith("## ")) >= _AI_MIN_SECTIONS
+    """Whether a model response is a real analysis rather than a stub or a truncation.
+
+    Counting headings alone is not enough. A reply cut off by a token limit still carries
+    the first several sections, and one such truncation cleared a four-section bar while
+    stopping mid-sentence - so the *last* required section has to be there too.
+    """
+    from leetvault.ai.prompt import FINAL_SECTION
+
+    sections = sum(1 for line in body.splitlines() if line.startswith("## "))
+    return sections >= _AI_MIN_SECTIONS and FINAL_SECTION in body
 
 
 def _latest_solution_source(

@@ -26,6 +26,12 @@ from leetvault.ai.prompt import SYSTEM_PROMPT
 
 _OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 _TIMEOUT = 600.0  # local CPU inference on a 7B model is slow but finite
+# This is analysis, not prose: the model is tracing real code and justifying complexity
+# claims, where sampling variety buys nothing and invented detail costs everything.
+_TEMPERATURE = 0.2
+# A full analysis of a Hard problem runs past Groq's 3072-token default, which truncated
+# mid-section and produced a file that looked complete enough to keep.
+_MAX_TOKENS = 16384
 
 
 @dataclass
@@ -52,8 +58,12 @@ class AIProvider(ABC):
         """Return info if this backend is usable on this machine, else None."""
 
     @abstractmethod
-    def generate(self, user_prompt: str) -> str | None:
-        """Return the analysis, or None if generation failed (see `last_error`)."""
+    def generate(self, user_prompt: str, system_prompt: str | None = None) -> str | None:
+        """Return the analysis, or None if generation failed (see `last_error`).
+
+        `system_prompt` lets a caller ask for part of the analysis instead of all of it,
+        which is how the retry path narrows the request after a full one fails.
+        """
 
     def _fail(self, exc: Exception) -> None:
         """Record why generation failed, preferring the API's own message.
@@ -102,7 +112,8 @@ class OllamaProvider(AIProvider):
             cost="free, unlimited",
         )
 
-    def generate(self, user_prompt: str) -> str | None:
+    def generate(self, user_prompt: str, system_prompt: str | None = None) -> str | None:
+        system = system_prompt or SYSTEM_PROMPT
         try:
             response = httpx.post(
                 f"{_OLLAMA_HOST}/api/chat",
@@ -110,9 +121,10 @@ class OllamaProvider(AIProvider):
                     "model": self.model,
                     "stream": False,
                     "messages": [
-                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "system", "content": system},
                         {"role": "user", "content": user_prompt},
                     ],
+                    "options": {"temperature": _TEMPERATURE, "num_predict": _MAX_TOKENS},
                 },
                 timeout=_TIMEOUT,
             )
@@ -150,11 +162,12 @@ class ClaudeCliProvider(AIProvider):
             cost="free with an existing Claude subscription",
         )
 
-    def generate(self, user_prompt: str) -> str | None:
+    def generate(self, user_prompt: str, system_prompt: str | None = None) -> str | None:
+        system = system_prompt or SYSTEM_PROMPT
         executable = self._executable()
         if executable is None:
             return None
-        command = [executable, "-p", f"{SYSTEM_PROMPT}\n\n---\n\n{user_prompt}"]
+        command = [executable, "-p", f"{system}\n\n---\n\n{user_prompt}"]
         if self.model:
             command += ["--model", self.model]
         try:
@@ -197,7 +210,8 @@ class AnthropicProvider(AIProvider):
             cost="paid, billed per token",
         )
 
-    def generate(self, user_prompt: str) -> str | None:
+    def generate(self, user_prompt: str, system_prompt: str | None = None) -> str | None:
+        system = system_prompt or SYSTEM_PROMPT
         try:
             import anthropic
 
@@ -208,7 +222,7 @@ class AnthropicProvider(AIProvider):
             message = client.messages.create(
                 model=self.model,
                 max_tokens=8000,
-                system=SYSTEM_PROMPT,
+                system=system,
                 messages=[{"role": "user", "content": user_prompt}],
             )
         except Exception as exc:  # noqa: BLE001 - best-effort, but recorded
@@ -245,7 +259,8 @@ class GeminiProvider(AIProvider):
             cost="free tier (no local hardware needed)",
         )
 
-    def generate(self, user_prompt: str) -> str | None:
+    def generate(self, user_prompt: str, system_prompt: str | None = None) -> str | None:
+        system = system_prompt or SYSTEM_PROMPT
         key = self._key()
         if not key:
             return None
@@ -255,8 +270,12 @@ class GeminiProvider(AIProvider):
                 f"{self.model}:generateContent",
                 params={"key": key},
                 json={
-                    "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+                    "systemInstruction": {"parts": [{"text": system}]},
                     "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+                    "generationConfig": {
+                        "temperature": _TEMPERATURE,
+                        "maxOutputTokens": _MAX_TOKENS,
+                    },
                 },
                 timeout=_TIMEOUT,
             )
@@ -294,7 +313,8 @@ class GroqProvider(AIProvider):
             cost="free tier (no local hardware needed)",
         )
 
-    def generate(self, user_prompt: str) -> str | None:
+    def generate(self, user_prompt: str, system_prompt: str | None = None) -> str | None:
+        system = system_prompt or SYSTEM_PROMPT
         key = self._key()
         if not key:
             return None
@@ -305,9 +325,11 @@ class GroqProvider(AIProvider):
                 json={
                     "model": self.model,
                     "messages": [
-                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "system", "content": system},
                         {"role": "user", "content": user_prompt},
                     ],
+                    "temperature": _TEMPERATURE,
+                    "max_tokens": _MAX_TOKENS,
                 },
                 timeout=_TIMEOUT,
             )
@@ -352,7 +374,8 @@ class NvidiaProvider(AIProvider):
             cost="free tier (no local hardware needed)",
         )
 
-    def generate(self, user_prompt: str) -> str | None:
+    def generate(self, user_prompt: str, system_prompt: str | None = None) -> str | None:
+        system = system_prompt or SYSTEM_PROMPT
         key = self._key()
         if not key:
             return None
@@ -363,10 +386,10 @@ class NvidiaProvider(AIProvider):
                 json={
                     "model": self.model,
                     "messages": [
-                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "system", "content": system},
                         {"role": "user", "content": user_prompt},
                     ],
-                    "temperature": 0.6,
+                    "temperature": _TEMPERATURE,
                     "top_p": 0.95,
                     "max_tokens": self._MAX_TOKENS,
                     # Thinking is worth its cost here: the analysis has to trace real code

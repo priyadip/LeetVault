@@ -570,13 +570,29 @@ def test_nvidia_records_error(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_stub_responses_are_rejected_not_written() -> None:
     """A short or truncated reply must not be written: analysis.md existing is what makes
     later runs skip the problem, so junk would be permanent."""
+    from leetvault.ai.prompt import FINAL_SECTION
     from leetvault.sync import _looks_like_analysis
 
+    complete = (
+        "## Problem Understanding\nx\n## Approach\ny\n## Algorithm\nz\n"
+        f"## Complexity\nw\n{FINAL_SECTION}\nAlready optimal."
+    )
+    assert _looks_like_analysis(complete)
     assert not _looks_like_analysis("I cannot help with that.")
     assert not _looks_like_analysis("## Problem Understanding\nIt asks for two numbers.")
-    assert _looks_like_analysis(
-        "## Problem Understanding\nx\n## Approach\ny\n## Algorithm\nz\n## Complexity\nw"
+
+
+def test_truncated_response_is_rejected_despite_having_sections() -> None:
+    """A reply cut off by a token limit keeps its early headings, so counting them passes
+    it. One did: four sections, stopped mid-sentence, and would have been kept forever."""
+    from leetvault.sync import _looks_like_analysis
+
+    truncated = (
+        "## Problem Understanding\nx\n## Approach\ny\n## Algorithm\nz\n"
+        "## Line-by-Line Explanation\n- `while temp % 2 == 0:`: factors out the twos and th"
     )
+    assert truncated.count("## ") >= 4
+    assert not _looks_like_analysis(truncated)
 
 
 def test_prompt_asks_for_the_formats_that_make_analysis_useful() -> None:

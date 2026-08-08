@@ -135,10 +135,9 @@ def run_analyze(
     show_list: bool,
     assume_yes: bool,
 ) -> None:
-    from leetvault.ai import build_user_prompt, get_provider
+    from leetvault.ai import build_user_prompt, compose_analysis, get_provider
     from leetvault.sync import (
         _latest_solution_source,
-        _looks_like_analysis,
         _maybe_push_to_github,
         _regenerate_readme,
     )
@@ -222,10 +221,12 @@ def run_analyze(
             q_path = question_md_path(repo_path, row.title_slug)
             statement = q_path.read_text(encoding="utf-8") if q_path.exists() else ""
 
-            body = provider.generate(
-                build_user_prompt(row.title, row.difficulty, row.topics, statement, lang, code)
+            result = compose_analysis(
+                provider,
+                build_user_prompt(row.title, row.difficulty, row.topics, statement, lang, code),
             )
-            if body and _looks_like_analysis(body):
+            body = result.body
+            if body:
                 # Only replace once the new analysis is in hand and looks real; a failed
                 # regeneration must leave the previous file intact rather than deleting it
                 # and writing nothing.
@@ -233,11 +234,7 @@ def run_analyze(
                 written += 1
             else:
                 failed += 1
-                if body:
-                    provider.last_error = (
-                        f"model returned {len(body)} chars with no section headings"
-                    )
-                last_error = provider.last_error or last_error
+                last_error = result.error or provider.last_error or last_error
             progress.advance(task)
 
     if written:

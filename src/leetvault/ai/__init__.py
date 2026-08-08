@@ -4,6 +4,7 @@ Off by default. Enabled only when the user picks an available backend, so instal
 leetvault never implies an API bill or a model download.
 """
 
+from leetvault.ai.composer import ComposeResult, compose_analysis, delay_for, is_complete
 from leetvault.ai.prompt import build_user_prompt
 from leetvault.ai.providers import (
     AIProvider,
@@ -15,6 +16,10 @@ from leetvault.ai.providers import (
 
 __all__ = [
     "AIProvider",
+    "ComposeResult",
+    "compose_analysis",
+    "delay_for",
+    "is_complete",
     "ProviderInfo",
     "available_providers",
     "build_user_prompt",

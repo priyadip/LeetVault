@@ -25,7 +25,15 @@ PROBLEM = ProblemMeta(
     url="https://leetcode.com/problems/two-sum/",
 )
 
-GOOD_ANALYSIS = "## Problem Understanding\nx\n## Approach\ny\n## Algorithm\nz\n## Complexity\nO(n)"
+
+def _complete_analysis() -> str:
+    """Every section the prompt requires - anything less is treated as a truncation."""
+    from leetvault.ai.prompt import SECTION_NAMES
+
+    return "\n\n".join(f"## {name}\nsomething about {name}." for name in SECTION_NAMES)
+
+
+GOOD_ANALYSIS = _complete_analysis()
 
 
 def _row(frontend_id: int, slug: str, provider: str | None) -> AnalysisRow:

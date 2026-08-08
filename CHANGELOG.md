@@ -5,6 +5,34 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-08-08
+
+### Changed
+
+- Analysis is now composed over as many model calls as it takes. One request for everything
+  is still tried first and kept when it works; if the reply is truncated or incomplete the
+  sections are re-requested in halves, then pairs, then one at a time, pausing between calls
+  so a free tier's per-minute budget is not exhausted in one shot. Groq allows 8000
+  tokens/minute, which a single Hard-problem analysis can spend on its own.
+- Generation now runs at temperature 0.2 with an explicit output limit on every backend.
+  Groq's default cap is 3072 tokens, which silently truncated a Hard problem mid-section,
+  and sampling variety buys nothing when the task is tracing real code.
+- The prompt now forbids the specific mistakes found in generated files: dry-run tables
+  filled in by pattern rather than computed, complexity terms the constraints rule out
+  (a bounded quantity is a constant, not a `2^k`), edge cases impossible under the stated
+  constraints, and vague improvements like "use a better data structure". It also asks the
+  model to name what the code does rather than the nearest familiar label, and to explain
+  the decision rule of a greedy solution rather than only its preprocessing.
+
+### Fixed
+
+- A truncated response is no longer accepted as complete. The previous check counted
+  headings, and a reply cut off at the output cap still had four - so it passed, was
+  written, and would never have been retried because the file's existence is what makes
+  later runs skip a problem. Completeness now requires every section, compared with dashes
+  and capitalisation normalised so a model writing `Line-by-Line` with a typographic hyphen
+  is not judged to have omitted it.
+
 ## [0.11.1] - 2026-08-08
 
 ### Fixed

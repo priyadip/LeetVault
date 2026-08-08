@@ -42,3 +42,16 @@ def isolated_config_dirs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Pat
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
     return tmp_path
+
+
+@pytest.fixture(autouse=True)
+def no_real_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Never actually wait between AI calls in tests.
+
+    The composer paces itself for free-tier rate limits, which is right in production and
+    pure dead time in a suite. Tests that assert *on* the pacing pass their own `sleep`
+    callable, so they are unaffected by this.
+    """
+    import leetvault.ai.composer as composer
+
+    monkeypatch.setattr(composer.time, "sleep", lambda _seconds: None)
