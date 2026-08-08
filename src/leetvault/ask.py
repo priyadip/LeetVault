@@ -173,10 +173,26 @@ def run_ask(
         console.print("[red]No AI provider configured.[/red] Run `leetvault ai` first.")
         raise typer.Exit(code=1)
 
-    console.print(f"[dim]{context.meta.frontend_id}. {context.meta.title} - asking {chosen}[/dim]")
-    answer, error = answer_question(context, question, str(chosen), model or store.get("ai_model"))
+    # Name the model, not just the provider. A model belonging to a different backend is an
+    # easy mistake to make - the two are configured separately - and it comes back as a bare
+    # 401, which reads like a bad key rather than a mismatch.
+    requested_model = model or store.get("ai_model")
+    from leetvault.ai import get_provider
+
+    resolved = get_provider(str(chosen), str(requested_model) if requested_model else None)
+    using = f"{chosen} ({resolved.model})" if resolved and resolved.model else str(chosen)
+    console.print(f"[dim]{context.meta.frontend_id}. {context.meta.title} - asking {using}[/dim]")
+
+    answer, error = answer_question(
+        context, question, str(chosen), str(requested_model) if requested_model else None
+    )
     if answer is None:
-        console.print(f"[red]No answer:[/red] {error}")
+        console.print(f"[red]No answer from {using}:[/red] {error}")
+        if error and ("401" in error or "404" in error):
+            console.print(
+                "[dim]A 401 or 404 here usually means the model is not one this provider "
+                "serves - check that the model and provider belong together.[/dim]"
+            )
         raise typer.Exit(code=1)
 
     console.print()

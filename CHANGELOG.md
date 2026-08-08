@@ -5,6 +5,13 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `ask` names the model it is using, not just the provider, and says what a 401 or 404
+  usually means. Provider and model are configured separately, so pairing a model with the
+  wrong backend is easy to do; a bot comment reading only "No answer: HTTP 401" sent the
+  reader looking at their API key when the cause was a Groq model name asked of NVIDIA.
+
 ## [0.15.0] - 2026-08-08
 
 ### Added
