@@ -14,6 +14,7 @@ issue, and without that gate every one of them would be spending your quota.
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -74,17 +75,17 @@ jobs:
           ISSUE_BODY: ${{ github.event.issue.body }}
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
+          # Parsing lives in leetvault, not here: logic inlined in YAML cannot be tested,
+          # and the version that was inlined silently preferred an issue form's
+          # "_No response_" placeholder over the real question asked in the title.
           python - <<'PY' >> "$GITHUB_OUTPUT"
-          import os, re
-          title = os.environ.get("ISSUE_TITLE", "")
+          import os
+          from leetvault.bot import parse_issue
           body = os.environ.get("COMMENT_BODY") or os.environ.get("ISSUE_BODY") or ""
-          # "[3348] why is this greedy?" or "3348: why ..." or a bare slug in the title.
-          match = re.match(r"\\s*[\\[(]?\\s*([A-Za-z0-9-]+)\\s*[\\])]?\\s*[:\\-]\\s*(.*)", title)
-          problem = match.group(1) if match else title.strip()
-          question = (body.strip() or (match.group(2).strip() if match else ""))
+          problem, question = parse_issue(os.environ.get("ISSUE_TITLE", ""), body)
           print(f"problem={problem}")
           print("question<<EOF")
-          print(question or "Explain this solution.")
+          print(question)
           print("EOF")
           PY
 
@@ -189,6 +190,59 @@ def _run_gh(args: list[str], stdin: str | None = None) -> tuple[bool, str]:
         message = (result.stderr or result.stdout or "").strip().splitlines()
         return False, message[-1] if message else f"gh exited {result.returncode}"
     return True, (result.stdout or "").strip()
+
+
+# What a GitHub issue form writes into a field the user left blank. It is not empty, so
+# naive truthiness picks it over a real question asked in the title.
+_FORM_PLACEHOLDER = "_no response_"
+# A hyphen is both part of a slug and a plausible separator, so one pattern cannot serve
+# both: `two-sum` must stay whole while `3348 - explain` must split. Brackets and a colon
+# are unambiguous; a bare hyphen only separates when it is spaced.
+_BRACKETED = re.compile(r"^\s*[\[(]\s*([^\])]+?)\s*[\])]\s*[:\-]?\s*(.*)", re.DOTALL)
+
+
+def _split_title(title: str) -> tuple[str, str]:
+    """The problem and the question carried in an issue title."""
+    text = (title or "").strip()
+    match = _BRACKETED.match(text)
+    if match:
+        return match.group(1).strip(), match.group(2).strip()
+    if ":" in text:
+        problem, _, question = text.partition(":")
+        return problem.strip(), question.strip()
+    if " - " in text:
+        problem, _, question = text.partition(" - ")
+        return problem.strip(), question.strip()
+    return text, ""
+
+
+def _meaningful(text: str) -> str:
+    """A form body with its headings and placeholders removed."""
+    kept = [
+        line
+        for line in (text or "").splitlines()
+        # Issue forms emit "### Question" headings and "_No response_" for blank fields;
+        # neither is anything the model should be asked to answer.
+        if not line.strip().startswith("#") and line.strip().lower() != _FORM_PLACEHOLDER
+    ]
+    return "\n".join(kept).strip()
+
+
+def parse_issue(title: str, body: str) -> tuple[str, str]:
+    """Work out which problem an issue is about, and what it asks.
+
+    The question can live in either place. The issue template's own example puts it in the
+    title, while the form offers a body field, so both have to work - and when both carry
+    something, both are kept rather than one silently winning.
+    """
+    problem, from_title = _split_title(title)
+    from_body = _meaningful(body)
+
+    if from_title and from_body:
+        question = f"{from_title}\n\n{from_body}"
+    else:
+        question = from_body or from_title
+    return problem, question or "Explain this solution."
 
 
 def repo_slug(repo_url: str) -> str | None:

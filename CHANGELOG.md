@@ -5,6 +5,17 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A question asked in the issue title is no longer discarded. GitHub issue forms write
+  `_No response_` into a field left blank, which is not empty, so the workflow preferred it
+  over the title - and the bot replied by asking what you wanted to know. Title and body are
+  now both used, and when both carry something neither is dropped.
+- Issue parsing moved out of the workflow YAML and into `leetvault.bot.parse_issue`, where
+  tests can reach it. Logic inlined in YAML is why the above shipped unnoticed. Slugs
+  containing hyphens are also handled properly now - `two-sum` stays whole while
+  `3348 - explain` splits.
+
 ## [0.15.2] - 2026-08-09
 
 ### Fixed
