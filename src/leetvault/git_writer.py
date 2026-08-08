@@ -344,6 +344,40 @@ def analysis_md_path(repo_path: Path, title_slug: str) -> Path:
     return problem_dir(repo_path, title_slug) / "analysis.md"
 
 
+def qa_md_path(repo_path: Path, title_slug: str) -> Path:
+    return problem_dir(repo_path, title_slug) / "qa.md"
+
+
+def append_qa(
+    repo_path: Path,
+    problem: ProblemMeta,
+    question: str,
+    answer: str,
+    provider: str,
+    model: str,
+    asked_at: str,
+) -> Path:
+    """Append one question and its answer to the problem's running Q&A log.
+
+    Appended rather than overwritten: this is a conversation, and the value is in being able
+    to re-read what you asked six months ago alongside what you were told. Separate from
+    analysis.md, which is regenerable, and from notes.md, which is yours alone.
+    """
+    path = qa_md_path(repo_path, problem.title_slug)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text(f"# {problem.frontend_id}. {problem.title} - Q&A\n", encoding="utf-8")
+    attribution = provider + (f" ({model})" if model else "")
+    entry = (
+        f"\n---\n\n## {question.strip()}\n\n"
+        f"{answer.strip()}\n\n"
+        f"_Answered {asked_at} by leetvault using {attribution}_\n"
+    )
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(entry)
+    return path
+
+
 def write_analysis_md(
     repo_path: Path, problem: ProblemMeta, body: str, provider: str, model: str
 ) -> Path:

@@ -41,6 +41,10 @@ leetvault watch                                             # or: poll automatic
 - `leetvault ai` — set up optional AI-generated solution analysis (**off by default**).
 - `leetvault analyze [problem]` — regenerate an existing `analysis.md` with a different
   backend — see [below](#redoing-an-analysis).
+- `leetvault ask <problem> "<question>"` — ask a question about one of your solutions and
+  keep the answer — see [below](#asking-questions).
+- `leetvault bot [--install]` — install a GitHub Actions workflow so you can ask from GitHub
+  itself — see [below](#asking-from-github).
 - `leetvault commands [--full]` — list every command and what it does, generated from the CLI
   itself so it cannot fall behind.
 
@@ -187,6 +191,48 @@ statements remain the property of LeetCode; each file notes this.
 
 Deduplicated by default within a 24h window — see [`--keep-all`](#--keep-all) above to change
 that.
+
+### Asking questions
+
+`analysis.md` answers the questions leetvault thought to ask. For everything else:
+
+```bash
+leetvault ask two-sum "why a hash map and not sorting first?"
+leetvault ask 3348 "is this actually greedy, or dynamic programming?" --push
+```
+
+The question and answer append to that problem's `qa.md`, so the thread accumulates and
+earlier exchanges are carried into later ones as context. A problem can be named by slug,
+number, or part of its title. `--no-save` prints the answer without keeping it.
+
+Context comes from the repository — `question.md`, your solution, and any existing
+`analysis.md` — not from the database. That is what lets the same command run in CI.
+
+### Asking from GitHub
+
+```bash
+leetvault bot --install
+```
+
+This writes a GitHub Actions workflow and an issue template into your solutions repo. After
+committing them and adding your API key as a repository secret, you can open an issue titled
+
+> `[two-sum]: why a hash map?`
+
+and the bot replies as a comment and commits the exchange to `Problems/two-sum/qa.md`.
+Replying in the thread asks a follow-up. It works from a phone, since it is just GitHub.
+
+Two things worth knowing:
+
+- **Your API key lives in GitHub's encrypted secrets**, never in the repo. `leetvault bot`
+  prints the exact settings page and secret name for the backend you have configured.
+- **Only issues you open are answered.** On a public repo anyone can file an issue, and
+  without that check every stranger would be spending your quota. The workflow compares the
+  issue author against the repository owner and does nothing otherwise.
+
+GitHub renders Markdown but does not run it, so a chat box inside `Problems/<slug>/` is not
+possible. Issues are the closest real equivalent — and they give you threading, search,
+notifications and history for free.
 
 ## Discovering commands
 

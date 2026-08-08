@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -169,6 +170,61 @@ def analyze(
         show_list=list_,
         assume_yes=yes,
     )
+
+
+@app.command()
+def ask(
+    problem: str = typer.Argument(..., help="Problem slug, number, or part of its title."),
+    question: str = typer.Argument(..., help="What you want to know about it."),
+    provider: str | None = typer.Option(
+        None, "--provider", "-p", help="Backend to use instead of the configured one."
+    ),
+    model: str | None = typer.Option(None, "--model", help="Model override for this run."),
+    repo: Path | None = typer.Option(
+        None, "--repo", help="Repository to read from and write to (default: configured)."
+    ),
+    save: bool = typer.Option(True, "--save/--no-save", help="Append to the problem's qa.md."),
+    push: bool = typer.Option(False, "--push/--no-push", help="Commit and push the qa.md."),
+) -> None:
+    """Ask a question about one of your solutions.
+
+    Reads the problem, your code and any existing analysis from the repo, answers, and
+    appends the exchange to that problem's qa.md.
+
+        leetvault ask two-sum "why a hash map and not sorting?"
+        leetvault ask 3348 "is this actually greedy?" --push
+    """
+    from leetvault.ask import run_ask
+
+    run_ask(
+        console,
+        problem=problem,
+        question=question,
+        provider_name=provider,
+        model=model,
+        repo=repo,
+        save=save,
+        push=push,
+    )
+
+
+@app.command()
+def bot(
+    install: bool = typer.Option(
+        False, "--install", help="Write the GitHub Actions workflow into your repo."
+    ),
+    repo: Path | None = typer.Option(None, "--repo", help="Repository to install into."),
+    show: bool = typer.Option(False, "--show", help="Print the setup steps and exit."),
+) -> None:
+    """Set up a GitHub bot that answers questions asked as issues.
+
+    Installs a workflow so you can open an issue titled `[two-sum]: why a hash map?` and get
+    an answer as a comment, saved to that problem's qa.md. Your API key stays in GitHub's
+    secrets, and only issues you open are answered.
+    """
+    from leetvault.bot import run_bot
+
+    run_bot(console, install=install, repo=repo, show=show)
 
 
 @app.command()

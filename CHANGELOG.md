@@ -5,6 +5,19 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- `leetvault ask <problem> "<question>"` - ask a question about one of your solutions and
+  keep the answer. The exchange appends to that problem's `qa.md`, and earlier questions in
+  the thread are carried into later ones. Context is read from the repository rather than
+  the database, so the same command runs anywhere a checkout exists.
+- `leetvault bot --install` - installs a GitHub Actions workflow and issue template so
+  questions can be asked from GitHub itself. Open an issue titled `[two-sum]: why a hash
+  map?` and the bot answers as a comment and commits the exchange to `qa.md`. The API key
+  lives in GitHub's encrypted secrets, and the workflow answers only issues opened by the
+  repository owner - on a public repo anyone can file one, and every stranger would
+  otherwise be spending the owner's quota.
+
 ## [0.12.2] - 2026-08-08
 
 ### Fixed

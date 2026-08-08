@@ -63,6 +63,13 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "N"]
 
+[tool.ruff.lint.flake8-bugbear]
+# Typer takes its option metadata as an argument default; that is the library's interface,
+# not the mutable-default bug B008 exists to catch. Ruff exempts str/bool annotations
+# already, so without this only the Path-annotated options are flagged - the same pattern
+# judged differently depending on its type.
+extend-immutable-calls = ["typer.Option", "typer.Argument"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true
