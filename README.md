@@ -216,8 +216,9 @@ leetvault bot --install
 
 If the [GitHub CLI](https://cli.github.com) is installed and signed in, that one command does
 everything: writes the workflow and issue template, uploads **every** stored API key as an
-encrypted repository secret, sets the provider variable, grants the workflow permission to
-commit, and pushes. Then open an issue titled
+encrypted repository secret, sets the provider (and model, if you have pinned one) as
+repository variables, grants the workflow permission to commit, and pushes. Then open an
+issue titled
 
 > `[two-sum]: why a hash map?`
 
@@ -230,6 +231,17 @@ token carries the `workflow` scope that a fine-grained PAT usually lacks — wit
 refuses any push that touches `.github/workflows/`. If `gh` is missing or a step is not
 permitted, the files are still written and the manual steps printed; `--manual` skips the
 GitHub calls entirely.
+
+To change which model the bot uses without reinstalling:
+
+```bash
+gh variable set LEETVAULT_AI_PROVIDER --repo <owner>/<repo> --body groq
+gh variable set LEETVAULT_AI_MODEL    --repo <owner>/<repo> --body openai/gpt-oss-120b
+```
+
+`LEETVAULT_AI_MODEL` is optional — leave it unset and each provider uses its own default.
+Worth setting deliberately: Groq's default is `llama-3.3-70b-versatile`, which is fast but
+not a reasoning model, and a Hard problem is where that shows.
 
 Two things worth knowing:
 

@@ -167,7 +167,8 @@ def test_bot_installs_a_valid_workflow(tmp_path: Path) -> None:
     assert workflow.exists()
     assert (tmp_path / TEMPLATE_PATH).exists()
 
-    yaml = pytest.importorskip("yaml")
+    import yaml
+
     parsed = yaml.safe_load(workflow.read_text(encoding="utf-8"))
     assert "jobs" in parsed
     assert parsed["jobs"]["answer"]["runs-on"] == "ubuntu-latest"
@@ -429,3 +430,56 @@ def test_permission_failures_still_recommend_refreshing_scopes(
     console = Console(record=True, width=200)
     run_bot(console, install=True, repo=tmp_path, show=False, manual=False)
     assert "gh auth refresh -s repo,workflow" in console.export_text()
+
+
+def test_workflow_passes_a_model_when_one_is_configured() -> None:
+    """Without this the provider's own default is used - for Groq that is
+    llama-3.3-70b-versatile, the model that produced a wrong analysis."""
+    from leetvault.bot import WORKFLOW
+
+    assert "vars.LEETVAULT_AI_MODEL" in WORKFLOW
+    assert "--model" in WORKFLOW
+
+
+def test_workflow_omits_the_model_flag_when_unset() -> None:
+    """An empty --model would override each provider's default with nothing."""
+    import re
+
+    import yaml
+
+    from leetvault.bot import WORKFLOW
+
+    run = next(
+        s["run"]
+        for s in yaml.safe_load(WORKFLOW)["jobs"]["answer"]["steps"]
+        if s.get("name") == "Answer"
+    )
+    assert re.search(r'if \[ -n "\$MODEL" \]', run), "must guard on the variable being set"
+
+
+def test_model_variable_is_set_only_when_pinned_locally(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An install that never chose a model should leave each provider on its own default."""
+    import leetvault.bot as bot
+    from leetvault import auth
+
+    store = ConfigStore()
+    store.set("repo_url", "https://github.com/owner/repo.git")
+    store.set("ai_provider", "groq")
+    monkeypatch.setattr(bot, "_gh", lambda: "/usr/bin/gh")
+    monkeypatch.setattr(auth, "load_provider_key", lambda p: "k" if p == "groq" else None)
+    monkeypatch.setattr(bot, "_run_gh", lambda args, stdin=None: (True, ""))
+    monkeypatch.setattr(
+        bot, "_commit_and_push", lambda p, branch="main": bot.Step("commit and push", True)
+    )
+
+    store.set("ai_model", None)
+    console = Console(record=True, width=200)
+    run_bot(console, install=True, repo=tmp_path, show=False, manual=False)
+    assert "LEETVAULT_AI_MODEL" not in console.export_text()
+
+    store.set("ai_model", "openai/gpt-oss-120b")
+    console = Console(record=True, width=200)
+    run_bot(console, install=True, repo=tmp_path, show=False, manual=False)
+    assert "variable LEETVAULT_AI_MODEL" in console.export_text()

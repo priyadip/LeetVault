@@ -50,6 +50,9 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.11",
     "respx>=0.21",
+    # Only for tests: the generated GitHub Actions workflow is parsed to prove it is valid
+    # YAML. A malformed one fails silently on GitHub, long after anyone would connect it.
+    "pyyaml>=6.0",
 ]
 
 [tool.hatch.build.targets.wheel]
