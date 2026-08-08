@@ -766,3 +766,72 @@ def test_failed_history_scan_runs_only_once(tmp_path: Path) -> None:
     factory = make_session_factory(make_engine(db_path))
     with session_scope(factory) as session:
         assert get_or_create_sync_state(session, "com").failed_scan_completed_at is not None
+
+
+def _session_token(refreshed_at: int, ttl: int) -> str:
+    """A real JWT - PyJWT rejects a handcrafted one, and decode_session_expiry uses it."""
+    import jwt
+
+    return jwt.encode({"refreshed_at": refreshed_at, "_session_expiry": ttl}, "k")
+
+
+def test_expired_session_is_advice_not_a_traceback() -> None:
+    """A lapsed cookie is the most common way a working install stops working. A stack
+    trace ending in raise_for_status tells the user nothing about the one-command fix."""
+    from leetvault.client import LeetCodeCredentials
+    from leetvault.sync import _require_live_session
+
+    creds = LeetCodeCredentials(leetcode_session=_session_token(1000, 10), csrftoken="c")
+    console = Console(record=True, width=200)
+    with pytest.raises(typer.Exit) as exc:
+        _require_live_session(console, creds, "com")
+    assert exc.value.exit_code == 1
+    output = console.export_text()
+    assert "expired" in output
+    assert "leetvault login --leetcode" in output
+
+
+def test_expired_session_names_the_site_flag_for_cn() -> None:
+    from leetvault.client import LeetCodeCredentials
+    from leetvault.sync import _require_live_session
+
+    creds = LeetCodeCredentials(leetcode_session=_session_token(1000, 10), csrftoken="c")
+    console = Console(record=True, width=200)
+    with pytest.raises(typer.Exit):
+        _require_live_session(console, creds, "cn")
+    assert "--leetcode --site cn" in console.export_text()
+
+
+def test_live_session_passes_the_preflight() -> None:
+    import time as _time
+
+    from leetvault.client import LeetCodeCredentials
+    from leetvault.sync import _require_live_session
+
+    creds = LeetCodeCredentials(
+        leetcode_session=_session_token(int(_time.time()), 86400), csrftoken="c"
+    )
+    _require_live_session(Console(record=True, width=200), creds, "com")  # must not raise
+
+
+def test_undecodable_session_is_not_blocked() -> None:
+    """Only a *known* expiry may block the run - an unparseable cookie must reach the API
+    and let the 401 handler decide, rather than locking the user out locally."""
+    from leetvault.client import LeetCodeCredentials
+    from leetvault.sync import _require_live_session
+
+    creds = LeetCodeCredentials(leetcode_session="not-a-jwt", csrftoken="c")
+    _require_live_session(Console(record=True, width=200), creds, "com")  # must not raise
+
+
+@respx.mock
+def test_401_raises_session_expired_from_any_endpoint() -> None:
+    """Checked in _request, so every endpoint reports it the same way rather than whichever
+    one is called first surfacing a bare HTTPStatusError."""
+    from leetvault.client import LeetCodeClient, LeetCodeCredentials, SessionExpiredError
+
+    respx.get("https://leetcode.com/api/submissions/").mock(return_value=Response(401))
+    creds = LeetCodeCredentials(leetcode_session="s", csrftoken="c")
+    with LeetCodeClient(creds, site="com") as client, pytest.raises(SessionExpiredError) as exc:
+        client.get_submissions_page(offset=0)
+    assert "leetvault login --leetcode" in str(exc.value)

@@ -36,6 +36,23 @@ class LeetCodeAPIError(RuntimeError):
     """Raised on a GraphQL `errors` payload or an unexpected/missing response shape."""
 
 
+class SessionExpiredError(LeetCodeAPIError):
+    """The stored LEETCODE_SESSION is no longer accepted.
+
+    Its own type because it is the one API failure with an obvious fix. LeetCode sessions
+    lapse after a couple of weeks, so this is routine rather than exceptional, and a raw
+    401 traceback tells the user nothing about what to do next.
+    """
+
+    def __init__(self, site: str = "com") -> None:
+        flag = " --leetcode" if site == "com" else f" --leetcode --site {site}"
+        super().__init__(
+            "LeetCode rejected the stored session (401). It has expired - they last "
+            f"about two weeks. Run `leetvault login{flag}` to sign in again; "
+            "nothing already synced is affected."
+        )
+
+
 @dataclass(frozen=True)
 class LeetCodeCredentials:
     leetcode_session: str
@@ -309,7 +326,13 @@ class LeetCodeClient:
 
     def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         self._limiter.acquire()
-        return self._client.request(method, url, **kwargs)
+        response = self._client.request(method, url, **kwargs)
+        # Checked here rather than at each call site so every endpoint reports an expired
+        # session the same way, instead of whichever one happens to be called first
+        # surfacing a bare 401 through raise_for_status.
+        if response.status_code == 401:
+            raise SessionExpiredError(self.site)
+        return response
 
     def get_submissions_page(self, offset: int, limit: int = 20) -> SubmissionsPage:
         response = self._request(

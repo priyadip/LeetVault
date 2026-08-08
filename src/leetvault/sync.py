@@ -15,8 +15,13 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeEl
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from leetvault.auth import load_github_pat, load_leetcode_credentials
-from leetvault.client import LeetCodeClient, ProblemMeta, RestSubmission
+from leetvault.auth import decode_session_expiry, load_github_pat, load_leetcode_credentials
+from leetvault.client import (
+    LeetCodeClient,
+    LeetCodeCredentials,
+    ProblemMeta,
+    RestSubmission,
+)
 from leetvault.config import ConfigStore
 from leetvault.db import (
     get_or_create_sync_state,
@@ -56,6 +61,25 @@ _AI_FAILURE_LIMIT = 3
 # stub or a truncated reply; writing that would be worse than writing nothing, because the
 # file's existence is what makes later runs skip the problem - the junk would be permanent.
 _AI_MIN_SECTIONS = 4
+
+
+def _require_live_session(console: Console, creds: LeetCodeCredentials, site: str) -> None:
+    """Stop before the first request when the session is already known to be dead.
+
+    The cookie carries its own expiry, so this costs no network call and turns the failure
+    into advice at the point the user typed the command, rather than partway through a
+    progress bar. The 401 handler still covers sessions revoked before their stated expiry.
+    """
+    expiry = decode_session_expiry(creds.leetcode_session)
+    if expiry is None or expiry > datetime.now(tz=UTC):
+        return
+    flag = " --leetcode" if site == "com" else f" --leetcode --site {site}"
+    console.print(
+        f"[red]Your LeetCode session expired at {expiry.isoformat()}.[/red] "
+        f"Sessions last about two weeks. Run `leetvault login{flag}` to sign in again - "
+        "nothing already synced is affected."
+    )
+    raise typer.Exit(code=1)
 
 
 def _sleep_between_pages() -> None:
@@ -658,6 +682,7 @@ def run_import(console: Console, site: str, keep_all: bool) -> None:
     if creds is None:
         console.print(f"[red]Not logged in for site '{site}'. Run `leetvault login` first.[/red]")
         raise typer.Exit(code=1)
+    _require_live_session(console, creds, site)
 
     store = ConfigStore()
     dedup_window = _resolve_dedup_window(store, keep_all)
@@ -771,6 +796,7 @@ def run_sync(console: Console, site: str, keep_all: bool) -> None:
     if creds is None:
         console.print(f"[red]Not logged in for site '{site}'. Run `leetvault login` first.[/red]")
         raise typer.Exit(code=1)
+    _require_live_session(console, creds, site)
 
     store = ConfigStore()
     dedup_window = _resolve_dedup_window(store, keep_all)

@@ -5,6 +5,17 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-08-08
+
+### Fixed
+
+- An expired LeetCode session now prints what happened and how to fix it, instead of a
+  traceback ending in `raise_for_status`. Sessions lapse after about two weeks, so this is
+  the most common way a working install stops working, and a bare `401 Unauthorized` gave
+  no hint that `leetvault login --leetcode` was the one-command fix. `sync`, `import` and
+  `watch` also check the cookie's own expiry before the first request, so the failure
+  arrives when you type the command rather than partway through a progress bar.
+
 ## [0.11.0] - 2026-08-06
 
 ### Added

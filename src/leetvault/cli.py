@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 import typer
 from rich.console import Console
@@ -21,6 +23,23 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 console = Console(legacy_windows=False)
+
+
+@contextmanager
+def _reporting_auth_errors() -> Iterator[None]:
+    """Turn an expired session into advice rather than a traceback.
+
+    Sessions lapse every couple of weeks, so this is the most common way a healthy install
+    stops working. A stack trace ending in `raise_for_status` gives the user nothing to act
+    on, and the fix is a single command.
+    """
+    from leetvault.client import SessionExpiredError
+
+    try:
+        yield
+    except SessionExpiredError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from None
 
 
 @app.command()
@@ -59,7 +78,8 @@ def import_(
     """Full history import of all accepted submissions (resumable)."""
     from leetvault.sync import run_import
 
-    run_import(console, site=site, keep_all=keep_all)
+    with _reporting_auth_errors():
+        run_import(console, site=site, keep_all=keep_all)
 
 
 @app.command()
@@ -72,7 +92,8 @@ def sync(
     """Incremental sync: pick up new accepted submissions since the last sync."""
     from leetvault.sync import run_sync
 
-    run_sync(console, site=site, keep_all=keep_all)
+    with _reporting_auth_errors():
+        run_sync(console, site=site, keep_all=keep_all)
 
 
 @app.command()
@@ -83,7 +104,8 @@ def watch(
     """Poll for new accepted submissions and sync+push automatically."""
     from leetvault.watch import run_watch
 
-    run_watch(console, interval=interval, site=site)
+    with _reporting_auth_errors():
+        run_watch(console, interval=interval, site=site)
 
 
 @app.command()
