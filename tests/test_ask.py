@@ -593,3 +593,31 @@ def test_workflow_delegates_parsing_to_the_tested_function() -> None:
 
     assert "from leetvault.bot import parse_issue" in WORKFLOW
     assert "re.match" not in WORKFLOW
+
+
+def test_workflow_serialises_concurrent_questions() -> None:
+    """Two questions asked close together would race to commit qa.md and the loser's push
+    is refused. Queue rather than cancel - cancelling drops an answer someone is waiting on."""
+    import yaml
+
+    from leetvault.bot import WORKFLOW
+
+    parsed = yaml.safe_load(WORKFLOW)
+    assert parsed["concurrency"]["group"]
+    assert parsed["concurrency"]["cancel-in-progress"] is False
+
+
+def test_workflow_rebases_and_retries_its_own_push() -> None:
+    """The concurrency group keeps two of these jobs apart, but nothing coordinates this
+    job with a `leetvault sync` pushing from a laptop mid-run."""
+    import yaml
+
+    from leetvault.bot import WORKFLOW
+
+    commit_step = next(
+        s["run"]
+        for s in yaml.safe_load(WORKFLOW)["jobs"]["answer"]["steps"]
+        if s.get("name") == "Commit the Q&A log"
+    )
+    assert "pull --rebase" in commit_step
+    assert "for attempt in" in commit_step, "a single attempt loses any race it enters"

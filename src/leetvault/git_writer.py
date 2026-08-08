@@ -5,6 +5,7 @@ every file written by one sync/import/watch run into a single commit.
 
 from __future__ import annotations
 
+import contextlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -448,17 +449,50 @@ def _authenticated_url(repo_url: str, pat: str) -> str:
 
 
 def _scrub(pat: str, text: str) -> str:
+    # An empty PAT matches between every character, which would turn an error message into
+    # a wall of asterisks and hide the actual failure.
+    if not pat:
+        return text
     return text.replace(pat, "***")
 
 
 def push(repo: Repo, repo_url: str, pat: str, branch: str = "main") -> None:
     """Push HEAD to `branch`, injecting the PAT into the push URL only for this call -
-    never as a named remote, so it never lands in .git/config."""
+    never as a named remote, so it never lands in .git/config.
+
+    Rebases onto the remote first. This repository has a second writer - the Q&A bot commits
+    answers from a CI runner - so the local clone is routinely behind, and git refuses a
+    non-fast-forward push. Rebase rather than merge keeps the history linear, and rather than
+    force because the remote's commits are real work, not a stale branch.
+    """
     url = _authenticated_url(repo_url, pat)
     try:
+        _rebase_onto_remote(repo, url, branch)
         repo.git.push(url, f"HEAD:refs/heads/{branch}")
     except GitCommandError as exc:
         raise GitWriterError(_scrub(pat, str(exc))) from None
+
+
+def _rebase_onto_remote(repo: Repo, url: str, branch: str) -> None:
+    """Replay local commits on top of the remote branch, if there is one.
+
+    Every failure here is survivable: a remote with no such branch yet is the normal first
+    push, and a conflict must leave the working tree usable rather than mid-rebase.
+    """
+    try:
+        repo.git.fetch(url, branch)
+    except GitCommandError:
+        return  # no remote branch yet - nothing to rebase onto
+    try:
+        repo.git.rebase("FETCH_HEAD")
+    except GitCommandError as exc:
+        with contextlib.suppress(GitCommandError):
+            repo.git.rebase("--abort")
+        raise GitWriterError(
+            "Local and remote history have diverged and cannot be replayed automatically: "
+            f"{exc.stderr or exc}. Resolve it by hand in the repo, then run the command "
+            "again."
+        ) from None
 
 
 def validate_github_pat(pat: str) -> str | None:
