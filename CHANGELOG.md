@@ -5,6 +5,16 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Security
+
+- The Q&A workflow no longer interpolates an issue's text into its shell script. A question
+  containing a double quote ended the string early and failed the job; one containing
+  `$(...)` or backticks would have executed on the runner, which holds the API keys and a
+  write token. The problem and question now reach the script through the environment, where
+  a shell treats them as data. The `$GITHUB_OUTPUT` block also uses a random delimiter, so a
+  question containing a line `EOF` cannot close it early and inject further step outputs.
+  **Re-run `leetvault bot --install` to update the workflow in your repository.**
+
 ## [0.16.1] - 2026-08-09
 
 ### Fixed

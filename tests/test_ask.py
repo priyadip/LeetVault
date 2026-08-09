@@ -656,3 +656,75 @@ def test_workflow_marks_comments_as_follow_ups() -> None:
     from leetvault.bot import WORKFLOW
 
     assert "is_comment=bool(comment)" in WORKFLOW
+
+
+def test_the_question_never_reaches_the_shell_as_code() -> None:
+    """A comment containing a quote broke the script; one containing $(...) or backticks
+    would have run on a runner holding the API keys and a write token. Values must arrive
+    through the environment, where the shell treats them as data."""
+    import yaml
+
+    from leetvault.bot import WORKFLOW
+
+    step = next(
+        s for s in yaml.safe_load(WORKFLOW)["jobs"]["answer"]["steps"] if s.get("name") == "Answer"
+    )
+    assert "steps.ask.outputs.question" not in step["run"], "interpolated into the script"
+    assert "steps.ask.outputs.problem" not in step["run"]
+    assert step["env"]["QUESTION"] == "${{ steps.ask.outputs.question }}"
+    assert '"$QUESTION"' in step["run"]
+
+
+def test_github_output_uses_an_unguessable_delimiter() -> None:
+    """A question containing a line "EOF" would close the block early and have the rest of
+    it read as further step outputs."""
+    import yaml
+
+    from leetvault.bot import WORKFLOW
+
+    step = next(
+        s
+        for s in yaml.safe_load(WORKFLOW)["jobs"]["answer"]["steps"]
+        if s.get("name") == "Work out what was asked"
+    )
+    assert "secrets.token_hex" in step["run"]
+    assert 'print("EOF")' not in step["run"]
+
+
+def test_a_question_with_quotes_and_parens_is_safe_in_the_shell() -> None:
+    """The exact comment that broke it: But this line " for i in range(L - 1, -1, -1):" ..."""
+    import re
+    import shutil
+    import subprocess
+    import tempfile
+
+    import yaml
+
+    from leetvault.bot import WORKFLOW
+
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("no shell available to parse with")
+    try:
+        # Presence is not capability: on Windows `which` can resolve a bash that cannot
+        # actually be executed from here.
+        if subprocess.run([bash, "-c", "true"], capture_output=True, timeout=30).returncode:
+            pytest.skip("bash is present but not usable here")
+    except OSError:
+        pytest.skip("bash is present but not executable here")
+
+    step = next(
+        s for s in yaml.safe_load(WORKFLOW)["jobs"]["answer"]["steps"] if s.get("name") == "Answer"
+    )
+    script = re.sub(r"\$\{\{[^}]*\}\}", "x", step["run"])
+    # Prove the script parses, and that the hostile value cannot escape the variable.
+    harness = (
+        'leetvault() { printf "%s\n" "$@"; }\n'
+        "PROBLEM=3348\n"
+        "QUESTION='But this line \" for i in range(L - 1, -1, -1):\" start in 148'\n" + script
+    )
+    with tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False, encoding="utf-8") as fh:
+        fh.write(harness)
+        path = fh.name
+    result = subprocess.run([bash, "-n", path], capture_output=True, text=True)
+    assert result.returncode == 0, f"script does not parse: {result.stderr}"
