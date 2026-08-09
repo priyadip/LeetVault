@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-08-09
+
 ### Security
 
 - The Q&A workflow no longer interpolates an issue's text into its shell script. A question
