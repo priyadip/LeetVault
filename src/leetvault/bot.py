@@ -95,10 +95,15 @@ jobs:
           problem, question = parse_issue(
               os.environ.get("ISSUE_TITLE", ""), body, is_comment=bool(comment)
           )
+          # A random delimiter, because the question is arbitrary text: one containing a
+          # line "EOF" would otherwise close the block early and let the rest be read as
+          # further outputs.
+          import secrets
+          delimiter = f"EOF_{secrets.token_hex(8)}"
           print(f"problem={problem}")
-          print("question<<EOF")
+          print(f"question<<{delimiter}")
           print(question)
-          print("EOF")
+          print(delimiter)
           PY
 
       - name: Answer
@@ -108,14 +113,19 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Through the environment, never interpolated into the script. A question is
+          # arbitrary text from an issue: one containing a quote ended the string early and
+          # broke the shell, and one containing $(...) or backticks would have run on this
+          # runner, which holds the keys above and a write token.
+          PROBLEM: ${{ steps.ask.outputs.problem }}
+          QUESTION: ${{ steps.ask.outputs.question }}
         run: |
           # --model is passed only when set. An empty one would override the provider's
           # own default with nothing, and those defaults differ per provider.
           ARGS=(--provider "${{ vars.LEETVAULT_AI_PROVIDER || 'gemini' }}")
           MODEL="${{ vars.LEETVAULT_AI_MODEL }}"
           if [ -n "$MODEL" ]; then ARGS+=(--model "$MODEL"); fi
-          leetvault ask "${{ steps.ask.outputs.problem }}" \\
-            "${{ steps.ask.outputs.question }}" \\
+          leetvault ask "$PROBLEM" "$QUESTION" \\
             "${ARGS[@]}" --repo . --no-push | tee /tmp/answer.txt
 
       - name: Comment with the answer
