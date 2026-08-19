@@ -5,6 +5,14 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Documentation
+
+- The README gains a **Command reference**: every command with every argument and option,
+  including the nine that had never been documented - `--site` on `import`/`sync`/`watch`,
+  `--provider` and `--model` on `analyze`/`ask`, `--yes`, and `--save`. Two tests check the
+  README against the live CLI, so a command or flag added without documenting it fails the
+  suite rather than being noticed months later by someone reading the help text instead.
+
 ## [0.16.3] - 2026-08-09
 
 ### Fixed
