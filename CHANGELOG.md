@@ -5,6 +5,16 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- NVIDIA requests no longer fail with `thinking_token_budget is not yet supported by the V2
+  model runner`. NVIDIA moved to a new serving stack and stopped accepting the
+  `reasoning_budget` parameter that had worked for weeks; nothing in leetvault changed. The
+  parameter is now optional - sent when accepted, dropped and retried once when a 400 names
+  it as unsupported. Thinking itself still works and is unaffected. A 400 about anything
+  else is not retried, since retrying a genuinely bad request only spends quota to fail
+  twice.
+
 ## [0.16.2] - 2026-08-09
 
 ### Security
