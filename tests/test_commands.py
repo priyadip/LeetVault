@@ -126,3 +126,36 @@ def test_readme_lists_every_ai_backend() -> None:
     for name in provider_names():
         needle = aliases.get(name, name)
         assert needle.lower() in readme.lower(), f"README does not mention the {name} backend"
+
+
+def _readme() -> str:
+    from pathlib import Path
+
+    return (Path(__file__).resolve().parents[1] / "README.md").read_text(encoding="utf-8")
+
+
+def test_readme_documents_every_option_of_every_command() -> None:
+    """Command names alone are not enough: a flag nobody documents is a flag nobody uses.
+    Nine options had accumulated undocumented before this check existed - `--site` on three
+    commands, `--provider`/`--model` on two, and the confirmation skips.
+
+    When adding a command or an option, add it to the Command reference section of the
+    README in the same change. `leetvault commands --full` prints the listing to copy.
+    """
+    readme = _readme()
+    undocumented = [
+        f"{name} {max(param.opts, key=len)}"
+        for name, command in _registered().items()
+        for param in command.params  # type: ignore[attr-defined]
+        if param.name != "help" and max(param.opts, key=len) not in readme
+    ]
+    assert not undocumented, f"README does not document: {', '.join(undocumented)}"
+
+
+def test_readme_has_a_command_reference_section() -> None:
+    """The per-option table lives here. Without the heading the options above could be
+    satisfied by scattered prose mentions, which is not a reference."""
+    readme = _readme()
+    assert "## Command reference" in readme
+    for name in _registered():
+        assert f"### `leetvault {name}" in readme, f"no reference entry for {name}"

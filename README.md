@@ -266,6 +266,126 @@ leetvault commands --full   # plus every argument and option
 
 Generated from the CLI itself, so it cannot fall behind the commands that actually exist.
 
+## Command reference
+
+Every command with every argument and option. Generated from the CLI itself, and a test
+fails if this section falls behind it.
+
+### `leetvault ai`
+
+Set up optional AI-generated solution analysis (off by default).
+
+| Flag / argument | Kind | Meaning |
+|---|---|---|
+| `--disable` | option | Turn AI analysis off. |
+| `--set-key` | option | Store an API key for gemini, groq, nvidia, or anthropic. |
+| `--show` | option | Print the current AI settings. |
+
+### `leetvault analyze [problem]`
+
+Regenerate an existing analysis.md with a different AI backend.
+
+| Flag / argument | Kind | Meaning |
+|---|---|---|
+| `problem` | argument | Problem slug, number, or part of its title. Omit with --all or --from. |
+| `--provider`, `-p` | option | Backend to use instead of the configured one. |
+| `--model` | option | Model override for this run. |
+| `--all` | option | Re-analyse every problem. |
+| `--from` | option | Re-analyse only what a given provider generated, e.g. groq. |
+| `--list` | option | Show which model wrote each analysis and exit. |
+| `--yes`, `-y` | option | Skip the overwrite confirmation. |
+
+### `leetvault ask <problem> <question>`
+
+Ask a question about one of your solutions.
+
+| Flag / argument | Kind | Meaning |
+|---|---|---|
+| `problem` | argument | Problem slug, number, or part of its title. |
+| `question` | argument | What you want to know about it. |
+| `--provider`, `-p` | option | Backend to use instead of the configured one. |
+| `--model` | option | Model override for this run. |
+| `--repo` | option | Repository to read from and write to (default: configured). |
+| `--save` | option | Append to the problem's qa.md. |
+| `--push` | option | Commit and push the qa.md. |
+
+### `leetvault bot`
+
+Set up a GitHub bot that answers questions asked as issues.
+
+| Flag / argument | Kind | Meaning |
+|---|---|---|
+| `--install` | option | Write the GitHub Actions workflow into your repo. |
+| `--repo` | option | Repository to install into. |
+| `--show` | option | Print the setup steps and exit. |
+| `--manual` | option | Only write the files; do not touch GitHub settings. |
+
+### `leetvault commands`
+
+List every leetvault command and what it does.
+
+| Flag / argument | Kind | Meaning |
+|---|---|---|
+| `--full` | option | Include every argument and option for each command. |
+
+### `leetvault config [key] [value]`
+
+Get or set persistent config (repo URL, DB path, dedup window, etc.).
+
+| Flag / argument | Kind | Meaning |
+|---|---|---|
+| `key` | argument | Config key to get/set, e.g. repo.url. |
+| `value` | argument | Value to set; omit to read. |
+
+### `leetvault import`
+
+Full history import of all accepted submissions (resumable).
+
+| Flag / argument | Kind | Meaning |
+|---|---|---|
+| `--site` | option | LeetCode site: com or cn. |
+| `--keep-all` | option | Disable same-day dedup; keep every accepted submission. |
+
+### `leetvault login`
+
+Store LEETCODE_SESSION + csrftoken (and optionally a GitHub PAT) in the OS keyring.
+
+| Flag / argument | Kind | Meaning |
+|---|---|---|
+| `--leetcode` | option | Only refresh the LeetCode session; leave the GitHub PAT alone. |
+| `--github` | option | Only refresh the GitHub PAT; leave the LeetCode session alone. |
+| `--force` | option | Re-prompt even for credentials that are still valid. |
+
+### `leetvault logout`
+
+Remove stored credentials from the OS keyring.
+
+### `leetvault status`
+
+Show session validity/expiry, sync state, and repo config.
+
+### `leetvault sync`
+
+Incremental sync: pick up new accepted submissions since the last sync.
+
+| Flag / argument | Kind | Meaning |
+|---|---|---|
+| `--site` | option | LeetCode site: com or cn. |
+| `--keep-all` | option | Disable same-day dedup; keep every accepted submission. |
+
+### `leetvault watch`
+
+Poll for new accepted submissions and sync+push automatically.
+
+| Flag / argument | Kind | Meaning |
+|---|---|---|
+| `--interval` | option | Polling interval in seconds (60-120). |
+| `--site` | option | LeetCode site: com or cn. |
+
+**Global flags**, usable with any command: `--install-completion`, `--show-completion`,
+`--help`.
+
+`leetvault commands --full` prints this same listing in the terminal.
 ## Honest limits
 
 - `watch` is polling (default 90s, configurable), not a real-time push — LeetCode has no public
