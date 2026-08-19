@@ -94,7 +94,7 @@ leetvault ai                      # detect backends and choose one
 leetvault ai --set-key gemini     # store a free key (or groq / nvidia / anthropic)
 leetvault ai --show               # print current settings
 leetvault ai --disable            # turn it back off
-leetvault config ai_model llama-3.3-70b-versatile   # override the model
+leetvault config ai_model openai/gpt-oss-120b   # override the model
 ```
 
 Generation is best-effort: a failing or slow model never breaks a sync. `sync` only fills
@@ -242,8 +242,8 @@ gh variable set LEETVAULT_AI_MODEL    --repo <owner>/<repo> --body openai/gpt-os
 ```
 
 `LEETVAULT_AI_MODEL` is optional — leave it unset and each provider uses its own default.
-Worth setting deliberately: Groq's default is `llama-3.3-70b-versatile`, which is fast but
-not a reasoning model, and a Hard problem is where that shows.
+Providers retire models without much notice, and a retired model is a 404 rather than a
+warning - if a backend suddenly stops answering, check its model list before anything else.
 
 Two things worth knowing:
 

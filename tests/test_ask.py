@@ -541,7 +541,7 @@ def test_a_401_explains_the_likely_model_mismatch(
         )
     output = console.export_text()
     assert "nvidia (openai/gpt-oss-120b)" in output
-    assert "model and provider belong together" in output
+    assert "retired" in output or "different backend" in output
 
 
 def test_issue_form_placeholder_is_not_treated_as_the_question() -> None:

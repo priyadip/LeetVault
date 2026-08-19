@@ -121,6 +121,29 @@ class AIProvider(ABC):
         self.last_error = detail
 
 
+def _rejects_a_parameter(response: httpx.Response) -> bool:
+    """Whether a 400 is complaining about a request parameter rather than the request.
+
+    Hosts retire tuning knobs without notice - NVIDIA dropped `thinking_token_budget` when
+    it moved to a new serving stack, and requests that had worked for weeks began failing.
+    An optional parameter is not worth a failed analysis, so a refusal that names one is a
+    signal to retry without it.
+    """
+    if response.status_code != 400:
+        return False
+    text = response.text.lower()
+    return any(
+        marker in text
+        for marker in (
+            "not yet supported",
+            "unsupported",
+            "unrecognized",
+            "unknown field",
+            "extra fields not permitted",
+        )
+    )
+
+
 class OllamaProvider(AIProvider):
     """A model running locally via Ollama - free, unlimited, offline, no account."""
 
@@ -346,7 +369,11 @@ class GroqProvider(AIProvider):
     """Groq's free tier - OpenAI-compatible, very fast, free API key, no local hardware."""
 
     name = "groq"
-    default_model = "llama-3.3-70b-versatile"
+    # Groq retired llama-3.3-70b-versatile and llama-3.1-8b-instant, and a retired model is
+    # a 404, not a warning - the default has to be a served one. gpt-oss-120b is Groq's own
+    # recommended replacement and reasons, which the retired 70B did not: it is the model
+    # that got a Hard problem's complexity right where the old default invented a 2^k term.
+    default_model = "openai/gpt-oss-120b"
     key_env = "GROQ_API_KEY"
     # The free tier meters input and output together at 8000 tokens/minute, and rejects a
     # request whose reserved total exceeds it - a 16384-token ask was refused outright with
@@ -417,10 +444,7 @@ class NvidiaProvider(AIProvider):
     default_model = "nvidia/nemotron-3-ultra-550b-a55b"
     key_env = "NVIDIA_API_KEY"
     # Reasoning models spend tokens thinking before they answer, and a full analysis is
-    # long, so the ceiling has to cover both or the response is truncated mid-section. But
-    # tokens are wall-clock here: at 16384 this 550B model ran past a ten-minute per-call
-    # timeout on a Hard problem, and an analysis that never arrives is worth less than a
-    # slightly shallower one that does.
+    # long, so the ceiling has to cover both or the response is truncated mid-section.
     _REASONING_BUDGET = 6144
     max_output_tokens = 16384
 
@@ -452,6 +476,9 @@ class NvidiaProvider(AIProvider):
         key = self._key()
         if not key:
             return None
+        # Optional because the host has removed it before. Sent when accepted, dropped when
+        # refused; the analysis does not depend on it.
+        extras: dict[str, object] = {"reasoning_budget": self._REASONING_BUDGET}
         try:
             response = httpx.post(
                 "https://integrate.api.nvidia.com/v1/chat/completions",
@@ -468,10 +495,30 @@ class NvidiaProvider(AIProvider):
                     # Thinking is worth its cost here: the analysis has to trace real code
                     # and justify complexity claims, not recall a familiar answer.
                     "chat_template_kwargs": {"enable_thinking": True},
-                    "reasoning_budget": self._REASONING_BUDGET,
+                    **extras,
                 },
                 timeout=_TIMEOUT,
             )
+            if extras and _rejects_a_parameter(response):
+                # The host swapped serving stacks and stopped accepting a tuning parameter
+                # that worked the day before - nothing here changed. Drop the optional
+                # extras and ask again rather than failing on a knob we do not need.
+                response = httpx.post(
+                    "https://integrate.api.nvidia.com/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {key}"},
+                    json={
+                        "model": self.model,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                        "temperature": _TEMPERATURE,
+                        "top_p": 0.95,
+                        "max_tokens": budget,
+                        "chat_template_kwargs": {"enable_thinking": True},
+                    },
+                    timeout=_TIMEOUT,
+                )
             response.raise_for_status()
             choices = response.json().get("choices") or []
             # Non-streaming keeps this consistent with the other providers - there is no

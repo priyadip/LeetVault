@@ -617,3 +617,98 @@ def test_prompt_asks_for_the_formats_that_make_analysis_useful() -> None:
         "## Possible Improvements",
     ):
         assert section in SYSTEM_PROMPT
+
+
+def test_rejects_a_parameter_recognises_the_real_message() -> None:
+    """The exact 400 NVIDIA began returning after it changed serving stacks."""
+    from leetvault.ai.providers import _rejects_a_parameter
+
+    real = httpx.Response(
+        400,
+        json={
+            "message": "ValueError: thinking_token_budget is not yet supported by the V2 "
+            "model runner. Run vLLM with VLLM_USE_V2_MODEL_RUNNER=0 to use "
+            "thinking_token_budget."
+        },
+        request=httpx.Request("POST", "https://x.invalid"),
+    )
+    assert _rejects_a_parameter(real)
+
+
+def test_a_400_about_the_request_itself_is_not_retried() -> None:
+    """Only a complaint about a parameter justifies dropping one. Retrying a genuinely bad
+    request just spends quota to fail twice."""
+    from leetvault.ai.providers import _rejects_a_parameter
+
+    other = httpx.Response(
+        400,
+        json={"message": "Input is too long for requested model."},
+        request=httpx.Request("POST", "https://x.invalid"),
+    )
+    assert not _rejects_a_parameter(other)
+    ok = httpx.Response(200, json={}, request=httpx.Request("POST", "https://x.invalid"))
+    assert not _rejects_a_parameter(ok)
+
+
+@respx.mock
+def test_nvidia_retries_without_the_tuning_parameter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A host can retire a knob overnight. The analysis does not depend on it, so a refusal
+    naming it should cost a second request, not the answer."""
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
+    route = respx.post("https://integrate.api.nvidia.com/v1/chat/completions").mock(
+        side_effect=[
+            Response(
+                400, json={"message": "ValueError: thinking_token_budget is not yet supported"}
+            ),
+            Response(200, json={"choices": [{"message": {"content": "## Approach\nHash map."}}]}),
+        ]
+    )
+    assert NvidiaProvider().generate("analyse this") == "## Approach\nHash map."
+    assert len(route.calls) == 2
+
+    first = json.loads(route.calls[0].request.content)
+    second = json.loads(route.calls[1].request.content)
+    assert "reasoning_budget" in first
+    assert "reasoning_budget" not in second, "the refused parameter must be dropped"
+    # Thinking itself still works and is what the quality depends on - keep it.
+    assert second["chat_template_kwargs"] == {"enable_thinking": True}
+
+
+@respx.mock
+def test_nvidia_does_not_retry_an_unrelated_400(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NVIDIA_API_KEY", "nvapi-test")
+    route = respx.post("https://integrate.api.nvidia.com/v1/chat/completions").mock(
+        return_value=Response(400, json={"error": {"message": "Input is too long"}})
+    )
+    provider = NvidiaProvider()
+    assert provider.generate("analyse this") is None
+    assert len(route.calls) == 1
+    assert "Input is too long" in (provider.last_error or "")
+
+
+# Models a provider has withdrawn. A retired model is a 404, not a warning, so a default
+# left pointing at one breaks that backend for every user at once - which is exactly what
+# happened when Groq retired llama-3.3-70b-versatile.
+RETIRED_MODELS = {
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "gemini-2.0-flash",
+    "gemini-2.5-flash",
+}
+
+
+def test_no_default_model_is_a_retired_one() -> None:
+    from leetvault.ai.providers import _PROVIDERS
+
+    for name, cls in _PROVIDERS.items():
+        assert cls.default_model not in RETIRED_MODELS, (
+            f"{name} defaults to {cls.default_model}, which its provider has withdrawn"
+        )
+
+
+def test_groq_default_is_a_reasoning_model() -> None:
+    """The retired default was fast but did not reason, and invented a 2^k complexity term
+    on a Hard problem. Its replacement is the one that got that problem right."""
+    from leetvault.ai.providers import GroqProvider
+
+    assert GroqProvider.default_model == "openai/gpt-oss-120b"

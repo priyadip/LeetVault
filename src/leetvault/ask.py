@@ -190,8 +190,9 @@ def run_ask(
         console.print(f"[red]No answer from {using}:[/red] {error}")
         if error and ("401" in error or "404" in error):
             console.print(
-                "[dim]A 401 or 404 here usually means the model is not one this provider "
-                "serves - check that the model and provider belong together.[/dim]"
+                "[dim]A 401 or 404 here means the provider will not serve that model: "
+                "either it belongs to a different backend, or it has been retired. "
+                "Check the provider's current model list.[/dim]"
             )
         raise typer.Exit(code=1)
 
