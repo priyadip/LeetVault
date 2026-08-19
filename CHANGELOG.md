@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.16.3] - 2026-08-09
+
 ### Fixed
 
 - NVIDIA requests no longer fail with `thinking_token_budget is not yet supported by the V2
