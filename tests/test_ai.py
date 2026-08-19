@@ -684,3 +684,31 @@ def test_nvidia_does_not_retry_an_unrelated_400(monkeypatch: pytest.MonkeyPatch)
     assert provider.generate("analyse this") is None
     assert len(route.calls) == 1
     assert "Input is too long" in (provider.last_error or "")
+
+
+# Models a provider has withdrawn. A retired model is a 404, not a warning, so a default
+# left pointing at one breaks that backend for every user at once - which is exactly what
+# happened when Groq retired llama-3.3-70b-versatile.
+RETIRED_MODELS = {
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "gemini-2.0-flash",
+    "gemini-2.5-flash",
+}
+
+
+def test_no_default_model_is_a_retired_one() -> None:
+    from leetvault.ai.providers import _PROVIDERS
+
+    for name, cls in _PROVIDERS.items():
+        assert cls.default_model not in RETIRED_MODELS, (
+            f"{name} defaults to {cls.default_model}, which its provider has withdrawn"
+        )
+
+
+def test_groq_default_is_a_reasoning_model() -> None:
+    """The retired default was fast but did not reason, and invented a 2^k complexity term
+    on a Hard problem. Its replacement is the one that got that problem right."""
+    from leetvault.ai.providers import GroqProvider
+
+    assert GroqProvider.default_model == "openai/gpt-oss-120b"

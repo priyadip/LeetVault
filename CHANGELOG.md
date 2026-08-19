@@ -14,6 +14,12 @@ All notable changes to this project are documented here. Format follows
   it as unsupported. Thinking itself still works and is unaffected. A 400 about anything
   else is not retried, since retrying a genuinely bad request only spends quota to fail
   twice.
+- Groq's default model is now `openai/gpt-oss-120b`. Groq decommissioned
+  `llama-3.3-70b-versatile` (and `llama-3.1-8b-instant`), and a retired model is a 404 rather
+  than a warning, so the old default had already stopped working for everyone. The
+  replacement is Groq's own recommendation and, unlike the retired one, reasons - it is the
+  model that got a Hard problem's complexity right where the old default invented a `2^k`
+  term. A test now fails if any default points at a model known to be withdrawn.
 
 ## [0.16.2] - 2026-08-09
 

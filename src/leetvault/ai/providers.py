@@ -369,7 +369,11 @@ class GroqProvider(AIProvider):
     """Groq's free tier - OpenAI-compatible, very fast, free API key, no local hardware."""
 
     name = "groq"
-    default_model = "llama-3.3-70b-versatile"
+    # Groq retired llama-3.3-70b-versatile and llama-3.1-8b-instant, and a retired model is
+    # a 404, not a warning - the default has to be a served one. gpt-oss-120b is Groq's own
+    # recommended replacement and reasons, which the retired 70B did not: it is the model
+    # that got a Hard problem's complexity right where the old default invented a 2^k term.
+    default_model = "openai/gpt-oss-120b"
     key_env = "GROQ_API_KEY"
     # The free tier meters input and output together at 8000 tokens/minute, and rejects a
     # request whose reserved total exceeds it - a 16384-token ask was refused outright with
