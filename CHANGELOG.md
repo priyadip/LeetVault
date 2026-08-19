@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.16.4] - 2026-08-09
+
 ### Documentation
 
 - The README gains a **Command reference**: every command with every argument and option,
