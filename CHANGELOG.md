@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-09-09
+
 ### Added
 
 - The site gains a **light/dark switch**, cycling system, light and dark. It follows your
