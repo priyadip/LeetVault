@@ -45,6 +45,8 @@ leetvault watch                                             # or: poll automatic
   keep the answer — see [below](#asking-questions).
 - `leetvault bot [--install]` — install a GitHub Actions workflow so you can ask from GitHub
   itself — see [below](#asking-from-github).
+- `leetvault site [--publish]` — build a browsable web page for the repo and publish it
+  on GitHub Pages — see [below](#the-web-page).
 - `leetvault commands [--full]` — list every command and what it does, generated from the CLI
   itself so it cannot fall behind.
 
@@ -266,6 +268,39 @@ leetvault commands --full   # plus every argument and option
 
 Generated from the CLI itself, so it cannot fall behind the commands that actually exist.
 
+### The web page
+
+`README.md` is a table. `leetvault site` builds something you can actually read in:
+
+```bash
+leetvault site              # write the page into the repo
+leetvault site --publish    # …and push it and turn on GitHub Pages
+```
+
+It publishes at `https://<you>.github.io/<repo>/` and gives you:
+
+- an **index** you can search and filter by topic, difficulty or language, and sort by any
+  column;
+- a **problem view** with the question, your code and the analysis in three panes you can
+  drag to any width — the sizes are remembered;
+- **every earlier submission** behind one button in the code pane, latest shown first;
+- the problem index as a **slide-over drawer**, so the three panes keep the full window;
+- **My Course** — your own notes, organised however you like.
+
+Nothing is duplicated. The page reads `Problems/<slug>/question.md`, `latest.*`,
+`analysis.md` and `history/*` at the paths sync already writes, so a file you edit on GitHub
+changes what the page shows immediately. Only the catalogue is generated, and `leetvault
+sync` refreshes it, so new problems appear without re-running `site`.
+
+**My Course** is the `Course/` folder: Markdown files, nested in whatever folders you like,
+and the hierarchy on the page *is* the folder layout — reorganising is a file move. Because
+GitHub Pages is static and cannot write anything back, the Edit and Add buttons open
+GitHub's own editor, which keeps every note in git history and means no access token is ever
+embedded in a public page.
+
+The page is plain HTML, CSS and JavaScript with no build step and no CDN, so a repo that
+still exists in five years still renders.
+
 ## Command reference
 
 Every command with every argument and option. Generated from the CLI itself, and a test
@@ -360,6 +395,15 @@ Store LEETCODE_SESSION + csrftoken (and optionally a GitHub PAT) in the OS keyri
 
 Remove stored credentials from the OS keyring.
 
+### `leetvault site`
+
+Build a browsable web page for your solutions repo.
+
+| Flag / argument | Kind | Meaning |
+|---|---|---|
+| `--publish` | option | Commit, push, and enable GitHub Pages for the repo. |
+| `--repo` | option | Repository to write the site into. |
+
 ### `leetvault status`
 
 Show session validity/expiry, sync state, and repo config.
@@ -386,6 +430,7 @@ Poll for new accepted submissions and sync+push automatically.
 `--help`.
 
 `leetvault commands --full` prints this same listing in the terminal.
+
 ## Honest limits
 
 - `watch` is polling (default 90s, configurable), not a real-time push — LeetCode has no public

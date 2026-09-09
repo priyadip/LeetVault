@@ -231,6 +231,24 @@ def bot(
 
 
 @app.command()
+def site(
+    publish: bool = typer.Option(
+        False, "--publish", help="Commit, push, and enable GitHub Pages for the repo."
+    ),
+    repo: Path | None = typer.Option(None, "--repo", help="Repository to write the site into."),
+) -> None:
+    """Build a browsable web page for your solutions repo.
+
+    Writes a static site into the repository - an index you can filter, and a problem view
+    with question, code and analysis in panes you can drag - reading the files sync already
+    writes. `--publish` also pushes it and turns on GitHub Pages.
+    """
+    from leetvault.site import run_site
+
+    run_site(console, repo=repo, publish=publish)
+
+
+@app.command()
 def commands(
     full: bool = typer.Option(
         False, "--full", help="Include every argument and option for each command."

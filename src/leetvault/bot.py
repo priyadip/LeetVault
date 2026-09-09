@@ -351,7 +351,12 @@ def _git(
     return result.returncode, output
 
 
-def _commit_and_push(repo_path: Path, branch: str = "main") -> Step:
+def _commit_and_push(
+    repo_path: Path,
+    branch: str = "main",
+    paths: tuple[str, ...] = (".github",),
+    message: str = "leetvault: install Q&A bot",
+) -> Step:
     """Commit the two files and push them using gh's credentials.
 
     A fine-grained PAT without the Workflows permission is refused outright when a push
@@ -366,10 +371,10 @@ def _commit_and_push(repo_path: Path, branch: str = "main") -> Step:
     if executable is None:
         return Step("commit and push", False, "gh is not installed")
 
-    _git(repo_path, ["add", ".github"])
+    _git(repo_path, ["add", *paths])
     staged, _ = _git(repo_path, ["diff", "--staged", "--quiet"])
     if staged != 0:
-        code, message = _git(repo_path, ["commit", "-m", "leetvault: install Q&A bot"])
+        code, message = _git(repo_path, ["commit", "-m", message])
         if code != 0:
             return Step("commit and push", False, message.splitlines()[-1] if message else "")
 

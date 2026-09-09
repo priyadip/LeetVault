@@ -1,0 +1,150 @@
+/* LeetVault static site. No build step and no framework, deliberately: a page generated
+   into someone's repository should still work years later without a toolchain to revive. */
+:root{
+  --bg:#0d1117; --panel:#161b22; --panel-2:#1c2128; --line:#30363d;
+  --text:#e6edf3; --muted:#8b949e; --accent:#2f81f7;
+  --easy:#3fb950; --medium:#d29922; --hard:#f85149;
+  --rail:248px; --radius:10px;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#ffffff; --panel:#f6f8fa; --panel-2:#ffffff; --line:#d0d7de;
+    --text:#1f2328; --muted:#59636e; --accent:#0969da;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  display:flex;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.muted{color:var(--muted)}
+.sm{font-size:12px}
+.spacer{flex:1}
+
+#rail{width:var(--rail);flex:0 0 var(--rail);background:var(--panel);
+  border-right:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:18px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:15px}
+.logo{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;
+  background:var(--accent);color:#fff;font-size:12px;font-weight:700}
+#rail nav{display:flex;flex-direction:column;gap:2px}
+#rail nav a{padding:8px 10px;border-radius:8px;color:var(--text)}
+#rail nav a:hover{background:var(--panel-2);text-decoration:none}
+#rail nav a.active{background:var(--accent);color:#fff}
+.rail-foot{margin-top:auto;font-size:12px;display:flex;flex-direction:column;gap:6px}
+.dot-ok::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;
+  background:var(--easy);margin-right:6px}
+
+#main{flex:1;min-width:0;display:flex;flex-direction:column}
+section{padding:20px 24px;flex:1;min-height:0;display:flex;flex-direction:column;gap:14px}
+.page-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.page-head h1{font-size:20px;margin:0}
+.btn{border:1px solid var(--line);background:var(--panel-2);color:var(--text);
+  padding:6px 12px;border-radius:8px;cursor:pointer;font-size:13px;font-family:inherit}
+.btn:hover{border-color:var(--accent)}
+.btn.ghost{background:transparent}
+.btn.sm{padding:3px 8px;font-size:12px}
+
+.stats{display:flex;gap:12px;flex-wrap:wrap}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:10px 16px;min-width:110px}
+.stat b{display:block;font-size:20px}
+
+.filters{display:flex;gap:8px;flex-wrap:wrap}
+.filters input,.filters select,#drawer-q{background:var(--panel-2);color:var(--text);
+  border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit;font-size:13px}
+.filters input{flex:1;min-width:180px}
+.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:var(--radius);flex:1}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{position:sticky;top:0;background:var(--panel);cursor:pointer;font-size:12px;
+  text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+tbody tr:hover{background:var(--panel)}
+td.title{white-space:normal;min-width:260px}
+.pill{padding:2px 9px;border-radius:999px;font-size:12px;border:1px solid}
+.Easy{color:var(--easy);border-color:var(--easy)}
+.Medium{color:var(--medium);border-color:var(--medium)}
+.Hard{color:var(--hard);border-color:var(--hard)}
+.topics{display:flex;gap:6px;flex-wrap:wrap}
+.topic{font-size:11px;padding:1px 8px;border-radius:999px;background:var(--panel-2);
+  border:1px solid var(--line);color:var(--muted)}
+
+/* Three panes, each resizable by dragging the strip between them. Flex-basis is what the
+   drag actually writes, so the panes keep filling the row at any window size. */
+#panes{display:flex;flex:1;min-height:0;gap:0}
+.pane{flex:1 1 0;min-width:120px;display:flex;flex-direction:column;
+  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.pane-head{display:flex;align-items:center;gap:8px;padding:8px 12px;
+  border-bottom:1px solid var(--line);background:var(--panel-2)}
+.pane-head h2{font-size:13px;margin:0;text-transform:uppercase;letter-spacing:.04em;
+  color:var(--muted)}
+.pane-body{overflow:auto;padding:12px 14px;flex:1}
+.pane-body pre{margin:0}
+.split{flex:0 0 10px;cursor:col-resize;position:relative}
+.split::after{content:"";position:absolute;inset:0 4px;border-radius:2px;background:var(--line)}
+.split:hover::after{background:var(--accent)}
+.problem-head h1{font-size:17px}
+
+.md{font-size:13.5px}
+.md h1{font-size:18px}
+.md h2{font-size:15px;margin-top:18px}
+.md h3{font-size:14px}
+.md pre{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
+  padding:10px;overflow:auto}
+.md code,.code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
+.md :not(pre)>code{background:var(--panel-2);padding:1px 5px;border-radius:5px}
+.md table{border:1px solid var(--line);border-radius:8px;display:block;
+  overflow-x:auto;white-space:nowrap;border-collapse:collapse}
+.md th,.md td{border:1px solid var(--line);padding:6px 10px}
+.md img{max-width:100%}
+.md blockquote{border-left:3px solid var(--line);margin:0;padding-left:12px;color:var(--muted)}
+pre code.code{display:block;white-space:pre}
+
+.notes{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:10px 14px}
+.notes summary{cursor:pointer;font-weight:600}
+
+#course-wrap{display:flex;flex:1;min-height:0}
+#course-tree{flex:0 0 300px;min-width:160px;overflow:auto;background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius);padding:10px}
+#course-body{flex:1;min-width:0;overflow:auto;background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius);padding:16px 20px}
+#course-tree ul{list-style:none;margin:0;padding-left:14px}
+#course-tree>ul{padding-left:0}
+#course-tree a{display:block;padding:4px 8px;border-radius:6px;color:var(--text)}
+#course-tree a:hover{background:var(--panel-2);text-decoration:none}
+#course-tree a.active{background:var(--accent);color:#fff}
+#course-tree .sec{font-weight:600;padding:6px 8px 2px;color:var(--muted);font-size:12px;
+  text-transform:uppercase;letter-spacing:.04em}
+
+#drawer,#modal{position:fixed;inset:0;z-index:20}
+.drawer-scrim{position:absolute;inset:0;background:rgba(0,0,0,.5)}
+.drawer-panel{position:absolute;left:0;top:0;bottom:0;width:min(420px,86vw);z-index:1;
+  background:var(--panel);border-right:1px solid var(--line);padding:14px;
+  display:flex;flex-direction:column;gap:10px}
+.drawer-head{display:flex;align-items:center;justify-content:space-between}
+#drawer-list{overflow:auto;display:flex;flex-direction:column;gap:1px}
+#drawer-list a{padding:6px 8px;border-radius:6px;color:var(--text);display:flex;gap:8px}
+#drawer-list a:hover{background:var(--panel-2);text-decoration:none}
+#drawer-list a.active{background:var(--accent);color:#fff}
+.modal-panel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1;
+  width:min(1000px,92vw);height:min(680px,86vh);background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius);display:flex;flex-direction:column}
+.modal-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;
+  border-bottom:1px solid var(--line)}
+.modal-body{display:flex;flex:1;min-height:0}
+#m-versions{flex:0 0 260px;overflow:auto;margin:0;padding:10px;list-style:none;
+  border-right:1px solid var(--line)}
+#m-versions li{padding:8px 10px;border-radius:8px;cursor:pointer}
+#m-versions li:hover{background:var(--panel-2)}
+#m-versions li.active{background:var(--accent);color:#fff}
+.modal-body pre{flex:1;overflow:auto;margin:0;padding:14px}
+
+@media (max-width:900px){
+  body{flex-direction:column}
+  #rail{width:auto;flex:none;flex-direction:row;align-items:center;gap:12px}
+  #rail nav{flex-direction:row}
+  .rail-foot{display:none}
+  #panes{flex-direction:column}
+  .split{cursor:row-resize}
+}
