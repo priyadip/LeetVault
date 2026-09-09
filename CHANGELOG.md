@@ -5,6 +5,14 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `leetvault site --publish` now commits the site it just wrote. The commit helper defaults
+  to staging `.github` for the Q&A bot, and the site call did not name its own paths - so
+  nothing was committed, the publish still reported OK, and GitHub Pages served the rendered
+  `README.md` instead of the page. Two tests now pin which paths a publish stages, and that
+  every file `write_site` writes is covered by them.
+
 ## [0.17.0] - 2026-09-09
 
 ### Added

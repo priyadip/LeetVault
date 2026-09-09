@@ -234,3 +234,41 @@ def test_page_never_writes_repo_content_into_html_unescaped() -> None:
     # The two places repo text becomes markup both go through the escaping path.
     assert "esc(p.title)" in app
     assert "replace(/[&<>\"']/g" in app
+
+
+def test_publish_stages_the_site_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The commit helper defaults to staging .github for the Q&A bot. Called without the
+    site's own paths it committed nothing, the publish still reported OK, and GitHub Pages
+    quietly served the rendered README instead of the page."""
+    import leetvault.bot as bot
+    import leetvault.site as site
+
+    ConfigStore().set("repo_url", "https://github.com/owner/repo.git")
+    _problem(tmp_path, "two-sum", 1)
+    captured: dict[str, object] = {}
+
+    def fake_push(repo_path, branch="main", paths=(".github",), message="") -> bot.Step:  # type: ignore[no-untyped-def]
+        captured["paths"] = paths
+        return bot.Step("commit and push", True)
+
+    monkeypatch.setattr(bot, "_gh", lambda: "/usr/bin/gh")
+    monkeypatch.setattr(bot, "_commit_and_push", fake_push)
+    monkeypatch.setattr(site, "_enable_pages", lambda slug, branch: site.Step("Pages", True))
+
+    run_site(Console(record=True, width=200), repo=tmp_path, publish=True)
+
+    staged = set(captured["paths"])  # type: ignore[arg-type]
+    assert "index.html" in staged
+    assert "assets" in staged
+    assert NOJEKYLL in staged
+    assert ".github" not in staged, "publishing a site must not sweep in the bot's files"
+
+
+def test_every_generated_file_is_covered_by_the_staged_paths(tmp_path: Path) -> None:
+    """A file written but never staged is a file the site silently lacks."""
+    from leetvault.site import SITE_PATHS
+
+    _problem(tmp_path, "two-sum", 1)
+    for written in write_site(tmp_path, "owner/repo"):
+        rel = written.relative_to(tmp_path).as_posix()
+        assert any(rel == p or rel.startswith(f"{p}/") for p in SITE_PATHS), rel
