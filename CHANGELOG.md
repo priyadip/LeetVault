@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-09-09
+
 ### Added
 
 - The site highlights code, with the colour scheme chosen in a new **Settings** screen -
@@ -558,7 +560,32 @@ Initial release.
 - `watch`: polling loop with graceful shutdown and session-expiry warnings.
 - `config`: get/set persistent settings.
 
-[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/priyadip/LeetVault/compare/v0.18.0...v0.19.0
+[0.18.0]: https://github.com/priyadip/LeetVault/compare/v0.17.1...v0.18.0
+[0.17.1]: https://github.com/priyadip/LeetVault/compare/v0.17.0...v0.17.1
+[0.17.0]: https://github.com/priyadip/LeetVault/compare/v0.16.4...v0.17.0
+[0.16.4]: https://github.com/priyadip/LeetVault/compare/v0.16.3...v0.16.4
+[0.16.3]: https://github.com/priyadip/LeetVault/compare/v0.16.2...v0.16.3
+[0.16.2]: https://github.com/priyadip/LeetVault/compare/v0.16.1...v0.16.2
+[0.16.1]: https://github.com/priyadip/LeetVault/compare/v0.16.0...v0.16.1
+[0.16.0]: https://github.com/priyadip/LeetVault/compare/v0.15.3...v0.16.0
+[0.15.3]: https://github.com/priyadip/LeetVault/compare/v0.15.2...v0.15.3
+[0.15.2]: https://github.com/priyadip/LeetVault/compare/v0.15.1...v0.15.2
+[0.15.1]: https://github.com/priyadip/LeetVault/compare/v0.15.0...v0.15.1
+[0.15.0]: https://github.com/priyadip/LeetVault/compare/v0.14.1...v0.15.0
+[0.14.1]: https://github.com/priyadip/LeetVault/compare/v0.14.0...v0.14.1
+[0.14.0]: https://github.com/priyadip/LeetVault/compare/v0.13.0...v0.14.0
+[0.13.0]: https://github.com/priyadip/LeetVault/compare/v0.12.2...v0.13.0
+[0.12.2]: https://github.com/priyadip/LeetVault/compare/v0.12.1...v0.12.2
+[0.12.1]: https://github.com/priyadip/LeetVault/compare/v0.12.0...v0.12.1
+[0.12.0]: https://github.com/priyadip/LeetVault/compare/v0.11.1...v0.12.0
+[0.11.1]: https://github.com/priyadip/LeetVault/compare/v0.11.0...v0.11.1
+[0.11.0]: https://github.com/priyadip/LeetVault/compare/v0.10.0...v0.11.0
+[0.10.0]: https://github.com/priyadip/LeetVault/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/priyadip/LeetVault/compare/v0.8.2...v0.9.0
+[0.8.2]: https://github.com/priyadip/LeetVault/compare/v0.8.1...v0.8.2
+[0.8.1]: https://github.com/priyadip/LeetVault/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/priyadip/LeetVault/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/priyadip/LeetVault/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/priyadip/LeetVault/compare/v0.6.0...v0.7.0
