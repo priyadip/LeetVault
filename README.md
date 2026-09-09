@@ -285,7 +285,9 @@ It publishes at `https://<you>.github.io/<repo>/` and gives you:
   drag to any width — the sizes are remembered;
 - **every earlier submission** behind one button in the code pane, latest shown first;
 - the problem index as a **slide-over drawer**, so the three panes keep the full window;
-- **My Course** — your own notes, organised however you like.
+- **My Course** — your own notes, organised however you like;
+- a **light/dark switch** that follows your system until you choose otherwise, and a
+  **sidebar you can fold away** (or press `\`) when you want the whole window.
 
 Nothing is duplicated. The page reads `Problems/<slug>/question.md`, `latest.*`,
 `analysis.md` and `history/*` at the paths sync already writes, so a file you edit on GitHub

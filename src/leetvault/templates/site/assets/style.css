@@ -6,23 +6,32 @@
   --easy:#3fb950; --medium:#d29922; --hard:#f85149;
   --rail:248px; --radius:10px;
 }
+/* Three states, not two: someone who has not chosen should follow their system, and a
+   choice must win over it in both directions. The script resolves "system" to an explicit
+   data-theme at load, so these two rules are all the palette needs - and the media query
+   below still does the right thing if the script never runs. */
+:root[data-theme="light"]{
+  --bg:#ffffff; --panel:#f6f8fa; --panel-2:#ffffff; --line:#d0d7de;
+  --text:#1f2328; --muted:#59636e; --accent:#0969da;
+}
 @media (prefers-color-scheme: light){
-  :root:not([data-theme="dark"]){
+  :root:not([data-theme]){
     --bg:#ffffff; --panel:#f6f8fa; --panel-2:#ffffff; --line:#d0d7de;
     --text:#1f2328; --muted:#59636e; --accent:#0969da;
   }
 }
 *{box-sizing:border-box}
+html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--text);
   font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  display:flex;min-height:100vh}
+  display:flex;overflow:hidden}
 a{color:var(--accent);text-decoration:none}
 a:hover{text-decoration:underline}
 .muted{color:var(--muted)}
 .sm{font-size:12px}
 .spacer{flex:1}
 
-#rail{width:var(--rail);flex:0 0 var(--rail);background:var(--panel);
+#rail{width:var(--rail);overflow:auto;flex:0 0 var(--rail);background:var(--panel);
   border-right:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:18px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:15px}
 .logo{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;
@@ -35,8 +44,9 @@ a:hover{text-decoration:underline}
 .dot-ok::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;
   background:var(--easy);margin-right:6px}
 
-#main{flex:1;min-width:0;display:flex;flex-direction:column}
-section{padding:20px 24px;flex:1;min-height:0;display:flex;flex-direction:column;gap:14px}
+#main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+section{padding:20px 24px;flex:1;min-height:0;min-width:0;display:flex;
+  flex-direction:column;gap:14px;overflow:hidden}
 .page-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .page-head h1{font-size:20px;margin:0}
 .btn{border:1px solid var(--line);background:var(--panel-2);color:var(--text);
@@ -45,6 +55,7 @@ section{padding:20px 24px;flex:1;min-height:0;display:flex;flex-direction:column
 .btn.ghost{background:transparent}
 .btn.sm{padding:3px 8px;font-size:12px}
 
+.page-head,.stats,.filters{flex:0 0 auto}
 .stats{display:flex;gap:12px;flex-wrap:wrap}
 .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
   padding:10px 16px;min-width:110px}
@@ -54,7 +65,8 @@ section{padding:20px 24px;flex:1;min-height:0;display:flex;flex-direction:column
 .filters input,.filters select,#drawer-q{background:var(--panel-2);color:var(--text);
   border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit;font-size:13px}
 .filters input{flex:1;min-width:180px}
-.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:var(--radius);flex:1}
+.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:var(--radius);
+  flex:1 1 auto;min-height:0}
 table{width:100%;border-collapse:collapse}
 th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
 th{position:sticky;top:0;background:var(--panel);cursor:pointer;font-size:12px;
@@ -148,3 +160,24 @@ pre code.code{display:block;white-space:pre}
   #panes{flex-direction:column}
   .split{cursor:row-resize}
 }
+
+/* Collapsible rail. On a problem view the three panes want the entire window, so the rail
+   folds away completely rather than shrinking to a strip of icons that still costs space. */
+.rail-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+#rail-toggle{border:none;background:transparent;color:var(--muted);cursor:pointer;
+  font-size:16px;line-height:1;padding:4px 6px;border-radius:6px}
+#rail-toggle:hover{background:var(--panel-2);color:var(--text)}
+body.rail-hidden #rail{display:none}
+#rail-show{position:fixed;left:10px;top:10px;z-index:15;display:none;
+  border:1px solid var(--line);background:var(--panel);color:var(--text);
+  border-radius:8px;padding:5px 9px;cursor:pointer;font-size:14px}
+body.rail-hidden #rail-show{display:block}
+body.rail-hidden section{padding-left:56px}
+#rail-show:hover{border-color:var(--accent)}
+/* The notes block sizes to its content so it can never squeeze the panes above it. */
+.notes{flex:0 0 auto;max-height:38vh;overflow:auto}
+
+/* Theme switch, in the rail beside the sidebar toggle. */
+#theme-toggle{border:1px solid var(--line);background:transparent;color:var(--muted);
+  cursor:pointer;border-radius:6px;padding:3px 8px;font-size:12px;line-height:1.4}
+#theme-toggle:hover{border-color:var(--accent);color:var(--text)}
