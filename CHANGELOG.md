@@ -5,6 +5,21 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- `leetvault site` builds a browsable web page for the solutions repo and, with `--publish`,
+  pushes it and turns on GitHub Pages. An index you can search, filter and sort; a problem
+  view with question, code and analysis in three panes you can drag, with the widths
+  remembered; every earlier submission behind one button; the problem index as a slide-over
+  drawer; and **My Course**, a `Course/` folder of Markdown nested however you like.
+- Nothing is duplicated: the page reads `question.md`, `latest.*`, `analysis.md` and
+  `history/*` at the paths sync already writes, so a file edited on GitHub changes the page
+  immediately. Only the catalogue is generated, and `sync` refreshes it - for a repository
+  that already has a site, never installing one that does not.
+- Because GitHub Pages is static, Edit and Add open GitHub's own editor rather than writing
+  from the browser, which keeps every note in git history and puts no access token in a
+  public page. The page is plain HTML, CSS and JavaScript - no build step, no CDN.
+
 ## [0.16.4] - 2026-08-09
 
 ### Documentation

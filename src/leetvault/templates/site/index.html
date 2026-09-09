@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LeetVault</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<aside id="rail">
+  <div class="brand"><span class="logo">LV</span><span>LeetVault</span></div>
+  <nav>
+    <a href="#/problems" data-nav="problems">Problems</a>
+    <a href="#/course" data-nav="course">My Course</a>
+  </nav>
+  <div class="rail-foot">
+    <div class="dot-ok">Synced from GitHub</div>
+    <a id="repo-link" href="#" target="_blank" rel="noopener">repo</a>
+    <div class="muted" id="generated"></div>
+  </div>
+</aside>
+
+<main id="main">
+  <!-- Problems list -->
+  <section id="view-problems" hidden>
+    <header class="page-head">
+      <h1 id="repo-title">Problems</h1>
+      <a class="btn" id="view-on-github" href="#" target="_blank" rel="noopener">View on GitHub</a>
+    </header>
+    <div class="stats" id="stats"></div>
+    <div class="filters">
+      <input id="q" type="search" placeholder="Search problems…" autocomplete="off">
+      <select id="f-topic"><option value="">All topics</option></select>
+      <select id="f-diff">
+        <option value="">All difficulty</option>
+        <option>Easy</option><option>Medium</option><option>Hard</option>
+      </select>
+      <select id="f-lang"><option value="">All languages</option></select>
+    </div>
+    <div class="table-wrap">
+      <table id="tbl">
+        <thead><tr>
+          <th data-sort="id">#</th><th data-sort="title">Problem</th>
+          <th data-sort="difficulty">Difficulty</th><th data-sort="lang">Language</th>
+          <th data-sort="date">Date</th><th>Analysis</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="muted" id="count"></p>
+  </section>
+
+  <!-- Single problem -->
+  <section id="view-problem" hidden>
+    <header class="page-head problem-head">
+      <button class="btn ghost" id="open-index">☰ Problem index</button>
+      <h1 id="p-title"></h1>
+      <span class="pill" id="p-diff"></span>
+      <span class="topics" id="p-topics"></span>
+      <span class="spacer"></span>
+      <button class="btn ghost" id="prev">← Prev</button>
+      <button class="btn ghost" id="next">Next →</button>
+      <a class="btn" id="p-leetcode" href="#" target="_blank" rel="noopener">LeetCode</a>
+    </header>
+
+    <div id="panes">
+      <div class="pane" id="pane-q">
+        <div class="pane-head"><h2>Question</h2>
+          <button class="btn ghost sm" data-copy="q">Copy</button></div>
+        <div class="pane-body md" id="q-body"></div>
+      </div>
+      <div class="split" data-split="0"></div>
+      <div class="pane" id="pane-c">
+        <div class="pane-head"><h2>Code</h2>
+          <span class="muted sm" id="c-meta"></span>
+          <span class="spacer"></span>
+          <button class="btn sm" id="btn-history">View history</button>
+          <button class="btn ghost sm" data-copy="c">Copy</button>
+        </div>
+        <div class="pane-body"><pre><code id="c-body" class="code"></code></pre></div>
+      </div>
+      <div class="split" data-split="1"></div>
+      <div class="pane" id="pane-a">
+        <div class="pane-head"><h2>Analysis</h2>
+          <button class="btn ghost sm" data-copy="a">Copy</button></div>
+        <div class="pane-body md" id="a-body"></div>
+      </div>
+    </div>
+
+    <details class="notes" id="notes-box">
+      <summary>Notes <span class="muted sm">(your own notes.md)</span></summary>
+      <div class="md" id="n-body"></div>
+      <a class="btn ghost sm" id="n-edit" href="#" target="_blank" rel="noopener">Edit on GitHub</a>
+    </details>
+  </section>
+
+  <!-- My Course -->
+  <section id="view-course" hidden>
+    <header class="page-head">
+      <h1>My Course</h1>
+      <a class="btn" id="course-new" href="#" target="_blank" rel="noopener">+ Add section</a>
+    </header>
+    <div id="course-wrap">
+      <nav id="course-tree" aria-label="Course outline"></nav>
+      <div class="split" data-split="course"></div>
+      <article id="course-body">
+        <div class="md" id="course-md"></div>
+      </article>
+    </div>
+  </section>
+</main>
+
+<!-- Problem index drawer -->
+<div id="drawer" hidden>
+  <div class="drawer-panel">
+    <div class="drawer-head">
+      <strong>Problem index</strong>
+      <button class="btn ghost sm" id="close-index">✕</button>
+    </div>
+    <input id="drawer-q" type="search" placeholder="Search…" autocomplete="off">
+    <div id="drawer-list"></div>
+  </div>
+  <div class="drawer-scrim" id="drawer-scrim"></div>
+</div>
+
+<!-- History modal -->
+<div id="modal" hidden>
+  <div class="modal-panel">
+    <div class="modal-head"><strong id="m-title">Code history</strong>
+      <button class="btn ghost sm" id="m-close">✕</button></div>
+    <div class="modal-body">
+      <ol id="m-versions"></ol>
+      <pre><code id="m-code" class="code"></code></pre>
+    </div>
+  </div>
+  <div class="drawer-scrim" id="modal-scrim"></div>
+</div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>

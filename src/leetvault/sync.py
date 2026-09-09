@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import random
 import time
@@ -656,9 +657,24 @@ def _latest_solution_source(
         return submission.lang, submission.code.code
 
 
+def _refresh_site_index(repo_path: Path) -> None:
+    """Keep a published site's catalogue in step with the repo.
+
+    Only refreshes an already-installed site - a repository without one should not grow a
+    site because a sync happened to run.
+    """
+    from leetvault.bot import repo_slug
+    from leetvault.site import refresh_index
+
+    slug = repo_slug(str(ConfigStore().get("repo_url") or "")) or ""
+    with contextlib.suppress(OSError, ValueError):
+        refresh_index(repo_path, slug)
+
+
 def _regenerate_readme(factory: sessionmaker[Session], repo_path: Path) -> None:
     with session_scope(factory) as session:
         generate_readme(session, repo_path)
+    _refresh_site_index(repo_path)
 
 
 def _maybe_push_to_github(console: Console, repo_path: Path, message: str) -> None:
