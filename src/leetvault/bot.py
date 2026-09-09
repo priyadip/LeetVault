@@ -14,6 +14,7 @@ issue, and without that gate every one of them would be spending your quota.
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -341,9 +342,13 @@ def _git(
     prefix = ["git", "-C", str(repo_path)]
     if credential_helper:
         prefix += ["-c", f"credential.helper=!{credential_helper} auth git-credential"]
+    # Without this git blocks on an interactive credential prompt that nothing can answer.
+    # Seen after a stored PAT was revoked: the push hung indefinitely rather than falling
+    # through to gh. A refusal is actionable; a hang looks like a dead network.
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
     try:
         result = subprocess.run(  # noqa: S603 - fixed argv, paths not user-controlled
-            [*prefix, *args], capture_output=True, text=True, timeout=300, check=False
+            [*prefix, *args], capture_output=True, text=True, timeout=300, check=False, env=env
         )
     except Exception as exc:  # noqa: BLE001 - report, never raise
         return 1, str(exc)

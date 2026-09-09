@@ -16,6 +16,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Fixed
 
+- git no longer hangs on an interactive credential prompt. With no terminal to answer it,
+  a push waited indefinitely instead of falling through to the other credential helper -
+  seen for real once a stored PAT had been revoked, where the command simply never returned.
+  It now fails fast with the actual error, which is something you can act on.
 - The site had two scrollbars. The shell was allowed to grow past the viewport as well as
   the region that owns the content, so a single list produced a page scrollbar and a table
   scrollbar. The shell is now fixed to the viewport and only the inner region scrolls.

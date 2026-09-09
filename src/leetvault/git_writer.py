@@ -466,6 +466,9 @@ def push(repo: Repo, repo_url: str, pat: str, branch: str = "main") -> None:
     force because the remote's commits are real work, not a stale branch.
     """
     url = _authenticated_url(repo_url, pat)
+    # Never wait on a credential prompt: with no terminal to answer it, git blocks forever
+    # and the user sees a command that simply never returns.
+    repo.git.update_environment(GIT_TERMINAL_PROMPT="0")
     try:
         _rebase_onto_remote(repo, url, branch)
         repo.git.push(url, f"HEAD:refs/heads/{branch}")

@@ -114,6 +114,9 @@ def test_push_wraps_git_command_error_and_scrubs_pat(
     pat = "ghp_supersecret"
 
     class _FailingGit:
+        def update_environment(self, **kwargs: str) -> None:
+            return None
+
         def fetch(self, url: str, branch: str) -> None:
             # No such branch on the remote: the normal first-push case, which push()
             # tolerates so it can go on to the push that this test is about.
