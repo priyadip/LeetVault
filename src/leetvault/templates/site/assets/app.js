@@ -389,9 +389,44 @@ async function main() {
     });
   }));
 
+  // system -> light -> dark -> system. Resolving "system" to an explicit attribute here
+  // keeps the stylesheet down to two palettes instead of three overlapping selectors.
+  const THEMES = ["system", "light", "dark"];
+  const prefersLight = matchMedia("(prefers-color-scheme: light)");
+  const applyTheme = (choice) => {
+    const effective = choice === "system" ? (prefersLight.matches ? "light" : "dark") : choice;
+    document.documentElement.dataset.theme = effective;
+    $("theme-toggle").textContent = { system: "Auto", light: "Light", dark: "Dark" }[choice];
+    localStorage.setItem("lv.theme", choice);
+  };
+  let theme = THEMES.includes(localStorage.getItem("lv.theme") || "")
+    ? localStorage.getItem("lv.theme")
+    : "system";
+  applyTheme(theme);
+  $("theme-toggle").onclick = () => {
+    theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+    applyTheme(theme);
+  };
+  // Follow the system only while the user has not chosen for themselves.
+  prefersLight.addEventListener("change", () => theme === "system" && applyTheme("system"));
+
+  // Hiding the rail is a preference, not a per-page state: someone who wants the whole
+  // window for three panes wants it on the next problem too.
+  const setRail = (hidden) => {
+    document.body.classList.toggle("rail-hidden", hidden);
+    localStorage.setItem("lv.rail", hidden ? "hidden" : "shown");
+  };
+  setRail(localStorage.getItem("lv.rail") === "hidden");
+  $("rail-toggle").onclick = () => setRail(true);
+  $("rail-show").onclick = () => setRail(false);
+
   document.querySelectorAll(".split").forEach(wireSplit);
   addEventListener("keydown", (e) => {
     if (e.key === "Escape") { $("drawer").hidden = true; $("modal").hidden = true; }
+    // A single key to reclaim the window, and the same key to get the rail back.
+    if (e.key === "\\" && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) {
+      setRail(!document.body.classList.contains("rail-hidden"));
+    }
   });
   addEventListener("hashchange", route);
   route();

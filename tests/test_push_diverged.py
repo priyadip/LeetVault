@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from git import Repo
 
-from leetvault.git_writer import GitWriterError, _rebase_onto_remote
+from leetvault.git_writer import GitWriterError, _rebase_onto_remote, push
 
 
 def _run(cwd: Path, *args: str) -> None:
@@ -113,6 +113,10 @@ def test_push_rebases_before_pushing(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     monkeypatch.setattr(gw, "_rebase_onto_remote", lambda *a, **k: calls.append("rebase"))
 
     class FakeGit:
+        def update_environment(self, **kwargs: str) -> None:
+            # push disables the interactive credential prompt before doing anything else.
+            calls.append("env")
+
         def push(self, *args: str) -> None:
             calls.append("push")
 
@@ -120,7 +124,7 @@ def test_push_rebases_before_pushing(monkeypatch: pytest.MonkeyPatch, tmp_path: 
         git = FakeGit()
 
     gw.push(FakeRepo(), "https://github.com/o/r.git", "tok", "main")  # type: ignore[arg-type]
-    assert calls == ["rebase", "push"]
+    assert calls == ["env", "rebase", "push"]
 
 
 def test_scrub_leaves_a_message_alone_when_there_is_no_pat() -> None:
@@ -130,3 +134,49 @@ def test_scrub_leaves_a_message_alone_when_there_is_no_pat() -> None:
 
     assert _scrub("", "fatal: some real error") == "fatal: some real error"
     assert _scrub("secret", "used secret here") == "used *** here"
+
+
+def test_push_never_waits_on_a_credential_prompt() -> None:
+    """With no terminal to answer it, git blocks forever and the command simply never
+    returns. Observed for real: after a stored PAT was revoked, a push hung instead of
+    falling through to the other credential helper. A refusal is actionable; a hang is not.
+    """
+    captured: dict[str, str] = {}
+
+    class FakeGit:
+        def update_environment(self, **kwargs: str) -> None:
+            captured.update(kwargs)
+
+        def fetch(self, *args: str) -> None:
+            return None
+
+        def rebase(self, *args: str) -> None:
+            return None
+
+        def push(self, *args: str) -> None:
+            return None
+
+    class FakeRepo:
+        git = FakeGit()
+
+    push(FakeRepo(), "https://github.com/o/r.git", "tok", "main")  # type: ignore[arg-type]
+    assert captured.get("GIT_TERMINAL_PROMPT") == "0"
+
+
+def test_the_bot_helper_disables_the_prompt_too(monkeypatch: pytest.MonkeyPatch) -> None:
+    import leetvault.bot as bot
+
+    captured: dict[str, object] = {}
+
+    class Result:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def fake_run(argv, **kwargs):  # type: ignore[no-untyped-def]
+        captured["env"] = kwargs.get("env") or {}
+        return Result()
+
+    monkeypatch.setattr(bot.subprocess, "run", fake_run)
+    bot._git(Path("."), ["status"])
+    assert captured["env"].get("GIT_TERMINAL_PROMPT") == "0"  # type: ignore[union-attr]

@@ -272,3 +272,54 @@ def test_every_generated_file_is_covered_by_the_staged_paths(tmp_path: Path) -> 
     for written in write_site(tmp_path, "owner/repo"):
         rel = written.relative_to(tmp_path).as_posix()
         assert any(rel == p or rel.startswith(f"{p}/") for p in SITE_PATHS), rel
+
+
+def test_only_one_thing_scrolls() -> None:
+    """Two scrollbars for one list is the symptom of the shell growing past the viewport as
+    well as the region that owns the content. The shell is fixed to the viewport instead."""
+    css = _asset("assets/style.css").read_text(encoding="utf-8")
+    assert "html,body{height:100%}" in css
+    body = css.split("body{margin:0")[1].split("}")[0]
+    assert "overflow:hidden" in body, "the page itself must never scroll"
+    assert "#main{" in css and "overflow:hidden" in css.split("#main{")[1].split("}")[0]
+    # The table is the thing that scrolls, and needs min-height:0 to be allowed to.
+    wrap = css.split(".table-wrap{")[1].split("}")[0]
+    assert "overflow:auto" in wrap and "min-height:0" in wrap
+
+
+def test_the_sidebar_can_be_hidden_for_a_full_window() -> None:
+    """Three panes on a problem view want the whole width."""
+    html = _asset("index.html").read_text(encoding="utf-8")
+    css = _asset("assets/style.css").read_text(encoding="utf-8")
+    app = _asset("assets/app.js").read_text(encoding="utf-8")
+
+    assert 'id="rail-toggle"' in html, "no way to collapse it"
+    assert 'id="rail-show"' in html, "no way to get it back"
+    assert "body.rail-hidden #rail{display:none}" in css
+    assert "body.rail-hidden #rail-show{display:block}" in css
+    # Folded away entirely rather than left as a strip that still costs width.
+    assert "body.rail-hidden section{padding-left:56px}" in css
+    assert 'localStorage.setItem("lv.rail"' in app, "the choice must survive navigation"
+
+
+def test_theme_can_be_switched_and_defaults_to_the_system() -> None:
+    """Three states, not two: someone who has not chosen should follow their system, and a
+    choice must win over it in both directions - including light on a dark machine."""
+    css = _asset("assets/style.css").read_text(encoding="utf-8")
+    html = _asset("index.html").read_text(encoding="utf-8")
+    app = _asset("assets/app.js").read_text(encoding="utf-8")
+
+    assert 'id="theme-toggle"' in html
+    assert ':root[data-theme="light"]{' in css, "an explicit light choice must win"
+    assert ":root:not([data-theme]){" in css, "unchosen must follow the system"
+    assert '"system", "light", "dark"' in app
+    assert 'localStorage.setItem("lv.theme"' in app, "the choice must survive a reload"
+    # Following the system after an explicit choice would ignore the user.
+    assert 'theme === "system" && applyTheme("system")' in app
+
+
+def test_the_page_still_themes_itself_without_javascript() -> None:
+    """The media query is the fallback if the script never runs - a page that renders black
+    text on a black ground because one file 404'd is worse than one that ignores a toggle."""
+    css = _asset("assets/style.css").read_text(encoding="utf-8")
+    assert "@media (prefers-color-scheme: light)" in css

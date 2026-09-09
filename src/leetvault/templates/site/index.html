@@ -7,8 +7,13 @@
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
+<button id="rail-show" title="Show sidebar" aria-label="Show sidebar">&#9776;</button>
 <aside id="rail">
-  <div class="brand"><span class="logo">LV</span><span>LeetVault</span></div>
+  <div class="rail-top">
+    <div class="brand"><span class="logo">LV</span><span>LeetVault</span></div>
+    <button id="theme-toggle" title="Theme">Auto</button>
+    <button id="rail-toggle" title="Hide sidebar" aria-label="Hide sidebar">&laquo;</button>
+  </div>
   <nav>
     <a href="#/problems" data-nav="problems">Problems</a>
     <a href="#/course" data-nav="course">My Course</a>

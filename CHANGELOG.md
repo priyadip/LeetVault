@@ -5,6 +5,25 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- The site gains a **light/dark switch**, cycling system, light and dark. It follows your
+  system until you choose, and a choice then wins in both directions - including light on a
+  dark machine. The stylesheet keeps its `prefers-color-scheme` rule as a fallback, so the
+  page still themes itself if the script never loads.
+- The **sidebar folds away** for a full-window view, from the button in its corner or the
+  `\` key, and stays folded across navigation.
+
+### Fixed
+
+- git no longer hangs on an interactive credential prompt. With no terminal to answer it,
+  a push waited indefinitely instead of falling through to the other credential helper -
+  seen for real once a stored PAT had been revoked, where the command simply never returned.
+  It now fails fast with the actual error, which is something you can act on.
+- The site had two scrollbars. The shell was allowed to grow past the viewport as well as
+  the region that owns the content, so a single list produced a page scrollbar and a table
+  scrollbar. The shell is now fixed to the viewport and only the inner region scrolls.
+
 ## [0.17.1] - 2026-09-09
 
 ### Fixed
