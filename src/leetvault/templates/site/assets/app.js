@@ -67,6 +67,19 @@ function markdown(src) {
       continue;
     }
 
+    // LeetCode's hints arrive as <details>/<summary>, which GitHub renders natively.
+    // Escaping them shows the reader raw markup, so exactly these three forms pass through
+    // - they carry no scripting and no attributes - while every other tag stays escaped.
+    if (/^\s*<details>\s*$/i.test(line)) { flush(); out.push("<details>"); i++; continue; }
+    if (/^\s*<\/details>\s*$/i.test(line)) { flush(); out.push("</details>"); i++; continue; }
+    const summary = line.match(/^\s*<summary>(.*)<\/summary>\s*$/i);
+    if (summary) {
+      flush();
+      out.push(`<summary>${inline(summary[1])}</summary>`);
+      i++;
+      continue;
+    }
+
     const heading = line.match(/^(#{1,6})\s+(.*)$/);
     if (heading) {
       flush();
@@ -105,6 +118,79 @@ function markdown(src) {
   }
   flush();
   return out.join("\n");
+}
+
+/* ---------- syntax highlighting ----------------------------------------- */
+/* Hand-rolled for the same reason as the Markdown renderer: no CDN, no build step, still
+ * working in five years. Correctness comes from the order of the alternation below -
+ * comments and strings are matched first, so a keyword inside a string is never coloured
+ * and a quote inside a comment never opens one. That single ordering is what separates a
+ * tokenizer from a set of hopeful replacements. */
+const KEYWORDS = {
+  py: `False None True and as assert async await break class continue def del elif else
+    except finally for from global if import in is lambda nonlocal not or pass raise return
+    try while with yield match case`,
+  java: `abstract assert boolean break byte case catch char class const continue default do
+    double else enum extends final finally float for if implements import instanceof int
+    interface long new package private protected public return short static super switch
+    synchronized this throw throws try void volatile while var record true false null`,
+  cpp: `auto bool break case catch char class const constexpr continue default delete do
+    double else enum explicit export extern false float for friend goto if inline int long
+    namespace new nullptr operator private protected public return short signed sizeof
+    static struct switch template this throw true try typedef typename union unsigned using
+    virtual void volatile while`,
+  js: `async await break case catch class const continue debugger default delete do else
+    export extends false finally for function if import in instanceof let new null return
+    static super switch this throw true try typeof undefined var void while yield`,
+  go: `break case chan const continue default defer else fallthrough for func go goto if
+    import interface map package range return select struct switch type var nil true false`,
+  rs: `as async await break const continue crate dyn else enum extern false fn for if impl
+    in let loop match mod move mut pub ref return self static struct super trait true type
+    unsafe use where while`,
+};
+KEYWORDS.c = KEYWORDS.cpp;
+KEYWORDS.ts = KEYWORDS.js;
+KEYWORDS.cs = KEYWORDS.java;
+KEYWORDS.kt = KEYWORDS.java;
+KEYWORDS.rb = KEYWORDS.py;
+
+const keywordSet = (ext) => {
+  const words = KEYWORDS[ext] || Object.values(KEYWORDS).join(" ");
+  return new Set(words.split(/\s+/).filter(Boolean));
+};
+
+// Comments, then strings, then numbers, then decorators, then words. Order is the contract.
+const TOKENS = new RegExp(
+  [
+    "(#[^\\n]*|//[^\\n]*|/\\*[\\s\\S]*?\\*/)",
+    "(\"\"\"[\\s\\S]*?\"\"\"|'''[\\s\\S]*?'''|`(?:\\\\[\\s\\S]|[^`\\\\])*`" +
+      "|\"(?:\\\\[\\s\\S]|[^\"\\\\\\n])*\"|'(?:\\\\[\\s\\S]|[^'\\\\\\n])*')",
+    "(\\b\\d[\\w.]*)",
+    "(@[A-Za-z_]\\w*)",
+    "([A-Za-z_]\\w*)",
+  ].join("|"),
+  "g",
+);
+
+function highlight(code, ext) {
+  const keywords = keywordSet(ext);
+  let out = "";
+  let last = 0;
+  let match;
+  TOKENS.lastIndex = 0;
+  while ((match = TOKENS.exec(code)) !== null) {
+    out += esc(code.slice(last, match.index));
+    const [text, comment, string, number, decorator, word] = match;
+    if (comment) out += `<span class="t-com">${esc(comment)}</span>`;
+    else if (string) out += `<span class="t-str">${esc(string)}</span>`;
+    else if (number) out += `<span class="t-num">${esc(number)}</span>`;
+    else if (decorator) out += `<span class="t-dec">${esc(decorator)}</span>`;
+    else if (keywords.has(word)) out += `<span class="t-key">${esc(word)}</span>`;
+    else if (code[TOKENS.lastIndex] === "(") out += `<span class="t-fn">${esc(word)}</span>`;
+    else out += esc(word);
+    last = match.index + text.length;
+  }
+  return out + esc(code.slice(last));
 }
 
 /* ---------- fetching ---------------------------------------------------- */
@@ -187,14 +273,14 @@ async function openProblem(slug) {
     p.has_notes ? text(`${dir}/notes.md`) : Promise.resolve(""),
   ]);
   $("q-body").innerHTML = markdown(question) || "<p class='muted'>No question.md yet.</p>";
-  $("c-body").textContent = code;
+  $("c-body").innerHTML = highlight(code, p.ext);
   $("a-body").innerHTML = markdown(analysis) ||
     "<p class='muted'>No analysis yet. Run <code>leetvault sync</code> with AI enabled.</p>";
   $("n-body").innerHTML = markdown(notes) || "<p class='muted'>Empty.</p>";
   $("n-edit").href = ghEdit(`${dir}/notes.md`);
   $("btn-history").textContent = `View history (${(p.history || []).length})`;
   $("btn-history").disabled = !(p.history || []).length;
-  restoreSplits();
+  buildLayout(layoutName);
 }
 
 function neighbour(step) {
@@ -222,7 +308,7 @@ async function openHistory() {
        <div>${esc(v.label)}</div><div class="muted sm">${esc(v.date || "")}</div></li>`).join("");
   const load = async (n) => {
     [...$("m-versions").children].forEach((li, k) => li.classList.toggle("active", k === n));
-    $("m-code").textContent = await text(versions[n].file);
+    $("m-code").innerHTML = highlight(await text(versions[n].file), p.ext);
   };
   $("m-versions").onclick = (e) => {
     const li = e.target.closest("li");
@@ -278,42 +364,116 @@ async function openCourse(path) {
     (markdown(body) || "<p class='muted'>Empty section.</p>");
 }
 
-/* ---------- resizable panes --------------------------------------------- */
-/* Sizes are per-layout in localStorage: a split you dragged is a preference, and having it
-   reset on every navigation would make the feature useless. */
-function restoreSplits() {
-  const saved = JSON.parse(localStorage.getItem("lv.splits") || "null");
-  if (!saved) return;
-  ["pane-q", "pane-c", "pane-a"].forEach((id, n) => {
-    if (saved[n]) $(id).style.flex = `0 0 ${saved[n]}px`;
-  });
+/* ---------- pane layout -------------------------------------------------- */
+/* The three panes are arranged from a spec rather than fixed markup, so "two stacked on the
+ * left, one down the right" is a different tree over the same elements - not a second set
+ * of DOM. A spec is either a pane key or [direction, ...children], nested freely.
+ *
+ * Every flexible child carries `flex: <grow> 1 0`, so a drag is just moving grow between
+ * two siblings. That is what makes the arrangement and the sizing independent: any layout
+ * is resizable by the same handle code, in whichever direction its container runs. */
+const LAYOUTS = {
+  cols: { label: "Three columns", spec: ["row", "q", "c", "a"] },
+  left2: { label: "Two left, one right", spec: ["row", ["col", "q", "c"], "a"] },
+  right2: { label: "One left, two right", spec: ["row", "q", ["col", "c", "a"]] },
+  topwide: { label: "One top, two below", spec: ["col", "q", ["row", "c", "a"]] },
+  rows: { label: "Three rows", spec: ["col", "q", "c", "a"] },
+};
+const PANE_IDS = { q: "pane-q", c: "pane-c", a: "pane-a" };
+let layoutName = "cols";
+
+const sizeKey = () => `lv.sizes.${layoutName}`;
+
+function readSizes() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(sizeKey()) || "{}");
+    return saved && typeof saved === "object" ? saved : {};
+  } catch {
+    return {};
+  }
 }
 
-function saveSplits() {
-  localStorage.setItem("lv.splits", JSON.stringify(
-    ["pane-q", "pane-c", "pane-a"].map((id) => $(id).getBoundingClientRect().width)));
+function writeSize(key, value) {
+  const sizes = readSizes();
+  sizes[key] = value;
+  localStorage.setItem(sizeKey(), JSON.stringify(sizes));
+}
+
+function buildLayout(name) {
+  layoutName = LAYOUTS[name] ? name : "cols";
+  const sizes = readSizes();
+  const spec = LAYOUTS[layoutName].spec;
+
+  // Hold the elements before detaching them. getElementById cannot find a node that is no
+  // longer in the document, so looking them up after the removal below returns null - the
+  // whole script then died on the first pane and the page rendered as bare HTML.
+  const panes = Object.fromEntries(
+    Object.entries(PANE_IDS).map(([key, id]) => [key, $(id)]),
+  );
+
+  const build = (node, path) => {
+    if (typeof node === "string") {
+      const el = panes[node];
+      el.dataset.key = node;
+      el.style.flex = `${sizes[node] || 1} 1 0`;
+      return el;
+    }
+    const [dir, ...children] = node;
+    const box = document.createElement("div");
+    box.className = `box ${dir}`;
+    box.dataset.key = path;
+    box.style.flex = `${sizes[path] || 1} 1 0`;
+    children.forEach((child, i) => {
+      if (i) {
+        const handle = document.createElement("div");
+        handle.className = `split ${dir}`;
+        box.append(handle);
+      }
+      box.append(build(child, `${path}.${i}`));
+    });
+    return box;
+  };
+
+  // Detach the panes first: they are reused across layouts, not rebuilt, so their scroll
+  // position and rendered content survive a rearrangement.
+  Object.values(panes).forEach((el) => el.remove());
+  $("panes").replaceChildren(build(spec, "b"));
+  $("panes").querySelectorAll(".split").forEach(wireSplit);
+  localStorage.setItem("lv.layout", layoutName);
+  const picker = $("set-layout");
+  if (picker) picker.value = layoutName;
 }
 
 function wireSplit(handle) {
   handle.addEventListener("pointerdown", (e) => {
-    const before = handle.previousElementSibling, after = handle.nextElementSibling;
+    const before = handle.previousElementSibling;
+    const after = handle.nextElementSibling;
     if (!before || !after) return;
-    const vertical = getComputedStyle(handle).cursor === "row-resize";
+    const vertical = handle.classList.contains("col");
+    const rect = (el) => el.getBoundingClientRect();
+    const size = (el) => (vertical ? rect(el).height : rect(el).width);
+
     const startPos = vertical ? e.clientY : e.clientX;
-    const a0 = vertical ? before.getBoundingClientRect().height : before.getBoundingClientRect().width;
-    const b0 = vertical ? after.getBoundingClientRect().height : after.getBoundingClientRect().width;
+    const a0 = size(before);
+    const b0 = size(after);
+    const growTotal =
+      parseFloat(before.style.flexGrow || 1) + parseFloat(after.style.flexGrow || 1);
     handle.setPointerCapture(e.pointerId);
 
     const move = (ev) => {
-      const d = (vertical ? ev.clientY : ev.clientX) - startPos;
-      const a = Math.max(120, a0 + d), b = Math.max(120, b0 - d);
-      before.style.flex = `0 0 ${a}px`;
-      after.style.flex = `0 0 ${b}px`;
+      const delta = (vertical ? ev.clientY : ev.clientX) - startPos;
+      const a = Math.max(80, a0 + delta);
+      const b = Math.max(80, b0 - delta);
+      // Grow is shared between the pair, so their combined share of the parent is
+      // unchanged and no other pane moves when these two are resized.
+      before.style.flex = `${(a / (a + b)) * growTotal} 1 0`;
+      after.style.flex = `${(b / (a + b)) * growTotal} 1 0`;
     };
     const up = () => {
       handle.removeEventListener("pointermove", move);
       handle.removeEventListener("pointerup", up);
-      if (handle.dataset.split !== "course") saveSplits();
+      writeSize(before.dataset.key, parseFloat(before.style.flexGrow));
+      writeSize(after.dataset.key, parseFloat(after.style.flexGrow));
     };
     handle.addEventListener("pointermove", move);
     handle.addEventListener("pointerup", up);
@@ -322,8 +482,10 @@ function wireSplit(handle) {
 
 /* ---------- routing ------------------------------------------------------ */
 function show(name) {
-  ["problems", "problem", "course"].forEach((v) => { $("view-" + v).hidden = v !== name; });
-  const nav = name === "course" ? "course" : "problems";
+  ["problems", "problem", "course", "settings"].forEach((v) => {
+    $("view-" + v).hidden = v !== name;
+  });
+  const nav = ["course", "settings"].includes(name) ? name : "problems";
   document.querySelectorAll("[data-nav]").forEach((a) =>
     a.classList.toggle("active", a.dataset.nav === nav));
 }
@@ -332,6 +494,7 @@ function route() {
   const hash = location.hash || "#/problems";
   const problem = hash.match(/^#\/p\/(.+)$/);
   if (problem) return openProblem(decodeURIComponent(problem[1]));
+  if (hash.startsWith("#/settings")) return show("settings");
   if (hash.startsWith("#/course")) {
     const path = hash.slice("#/course".length).replace(/^\//, "");
     return openCourse(path ? decodeURIComponent(path) : "");
@@ -342,7 +505,9 @@ function route() {
 /* ---------- boot --------------------------------------------------------- */
 async function main() {
   try {
-    DATA = await (await fetch("assets/index.json")).json();
+    // Revalidate every time: sync rewrites this on each run, and a stale catalogue
+    // paired with a fresh page is a confusing way to see yesterday's problems.
+    DATA = await (await fetch("assets/index.json", { cache: "no-cache" })).json();
   } catch {
     document.body.innerHTML =
       "<p style='padding:24px'>Could not load assets/index.json. Run <code>leetvault site</code>.</p>";
@@ -381,6 +546,8 @@ async function main() {
   $("next").onclick = () => neighbour(1);
   $("btn-history").onclick = openHistory;
   $("m-close").onclick = $("modal-scrim").onclick = () => { $("modal").hidden = true; };
+  $("btn-notes").onclick = () => { $("notes-modal").hidden = false; };
+  $("n-close").onclick = $("notes-scrim").onclick = () => { $("notes-modal").hidden = true; };
 
   document.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", () => {
     const src = { q: "q-body", c: "c-body", a: "a-body" }[b.dataset.copy];
@@ -397,6 +564,7 @@ async function main() {
     const effective = choice === "system" ? (prefersLight.matches ? "light" : "dark") : choice;
     document.documentElement.dataset.theme = effective;
     $("theme-toggle").textContent = { system: "Auto", light: "Light", dark: "Dark" }[choice];
+    $("set-theme").value = choice;
     localStorage.setItem("lv.theme", choice);
   };
   let theme = THEMES.includes(localStorage.getItem("lv.theme") || "")
@@ -410,6 +578,31 @@ async function main() {
   // Follow the system only while the user has not chosen for themselves.
   prefersLight.addEventListener("change", () => theme === "system" && applyTheme("system"));
 
+  // A template literal: real newlines, no escape sequences to get mangled.
+  const SAMPLE = `class Solution:
+    def twoSum(self, nums, target):  # a hash map beats sorting
+        seen = {}          # index by value
+        for i, num in enumerate(nums):
+            if target - num in seen:
+                return [seen[target - num], i]
+            seen[num] = i
+        return []`;
+
+  const applyCode = (name) => {
+    document.documentElement.dataset.code = name;
+    localStorage.setItem("lv.code", name);
+    $("set-code").value = name;
+    $("code-sample").innerHTML = highlight(SAMPLE, "py");
+  };
+  applyCode(localStorage.getItem("lv.code") || "github-dark");
+  buildLayout(localStorage.getItem("lv.layout") || "cols");
+  $("set-layout").onchange = (e) => buildLayout(e.target.value);
+  $("set-code").onchange = (e) => applyCode(e.target.value);
+
+  // The rail button and the Settings dropdown are two controls over one preference, so
+  // each has to reflect what the other did.
+  $("set-theme").onchange = (e) => { theme = e.target.value; applyTheme(theme); };
+
   // Hiding the rail is a preference, not a per-page state: someone who wants the whole
   // window for three panes wants it on the next problem too.
   const setRail = (hidden) => {
@@ -420,9 +613,12 @@ async function main() {
   $("rail-toggle").onclick = () => setRail(true);
   $("rail-show").onclick = () => setRail(false);
 
-  document.querySelectorAll(".split").forEach(wireSplit);
   addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { $("drawer").hidden = true; $("modal").hidden = true; }
+    if (e.key === "Escape") {
+      $("drawer").hidden = true;
+      $("modal").hidden = true;
+      $("notes-modal").hidden = true;
+    }
     // A single key to reclaim the window, and the same key to get the rail back.
     if (e.key === "\\" && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) {
       setRail(!document.body.classList.contains("rail-hidden"));

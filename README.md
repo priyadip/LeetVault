@@ -286,6 +286,10 @@ It publishes at `https://<you>.github.io/<repo>/` and gives you:
 - **every earlier submission** behind one button in the code pane, latest shown first;
 - the problem index as a **slide-over drawer**, so the three panes keep the full window;
 - **My Course** — your own notes, organised however you like;
+- **syntax-highlighted code**, with the colour scheme chosen in Settings;
+- **five pane arrangements** - three columns, two-left, two-right, one-top, three rows -
+  each remembering its own sizes;
+- collapsible **hints**, rendered the way GitHub renders them;
 - a **light/dark switch** that follows your system until you choose otherwise, and a
   **sidebar you can fold away** (or press `\`) when you want the whole window.
 
@@ -300,8 +304,9 @@ GitHub Pages is static and cannot write anything back, the Edit and Add buttons 
 GitHub's own editor, which keeps every note in git history and means no access token is ever
 embedded in a public page.
 
-The page is plain HTML, CSS and JavaScript with no build step and no CDN, so a repo that
-still exists in five years still renders.
+The page is plain HTML, CSS and JavaScript with no build step and no CDN - including its
+Markdown renderer and syntax highlighter - so a repo that still exists in five years still
+renders. Asset URLs carry a content hash, so an update is never served from a stale cache.
 
 ## Command reference
 

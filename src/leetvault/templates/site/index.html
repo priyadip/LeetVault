@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LeetVault</title>
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/style.css?v=__ASSET_VERSION__">
 </head>
 <body>
 <button id="rail-show" title="Show sidebar" aria-label="Show sidebar">&#9776;</button>
@@ -17,6 +17,7 @@
   <nav>
     <a href="#/problems" data-nav="problems">Problems</a>
     <a href="#/course" data-nav="course">My Course</a>
+    <a href="#/settings" data-nav="settings">Settings</a>
   </nav>
   <div class="rail-foot">
     <div class="dot-ok">Synced from GitHub</div>
@@ -65,6 +66,7 @@
       <span class="spacer"></span>
       <button class="btn ghost" id="prev">← Prev</button>
       <button class="btn ghost" id="next">Next →</button>
+      <button class="btn ghost" id="btn-notes">Notes</button>
       <a class="btn" id="p-leetcode" href="#" target="_blank" rel="noopener">LeetCode</a>
     </header>
 
@@ -92,11 +94,6 @@
       </div>
     </div>
 
-    <details class="notes" id="notes-box">
-      <summary>Notes <span class="muted sm">(your own notes.md)</span></summary>
-      <div class="md" id="n-body"></div>
-      <a class="btn ghost sm" id="n-edit" href="#" target="_blank" rel="noopener">Edit on GitHub</a>
-    </details>
   </section>
 
   <!-- My Course -->
@@ -115,6 +112,41 @@
   </section>
 </main>
 
+  <!-- Settings -->
+  <section id="view-settings" hidden>
+    <header class="page-head"><h1>Settings</h1></header>
+    <div class="setting">
+      <label for="set-theme">Page theme<br><span class="muted sm">Auto follows your system.</span></label>
+      <select id="set-theme">
+        <option value="system">Auto</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </div>
+    <div class="setting">
+      <label for="set-code">Code colours<br><span class="muted sm">Independent of the page theme.</span></label>
+      <select id="set-code">
+        <option value="github-dark">GitHub Dark</option>
+        <option value="github-light">GitHub Light</option>
+        <option value="dracula">Dracula</option>
+        <option value="monokai">Monokai</option>
+        <option value="solarized">Solarized</option>
+        <option value="mono">No colour</option>
+      </select>
+    </div>
+    <div class="setting">
+      <label for="set-layout">Pane layout<br><span class="muted sm">Drag the dividers to resize; each layout remembers its own sizes.</span></label>
+      <select id="set-layout">
+        <option value="cols">Three columns</option>
+        <option value="left2">Two left, one right</option>
+        <option value="right2">One left, two right</option>
+        <option value="topwide">One top, two below</option>
+        <option value="rows">Three rows</option>
+      </select>
+    </div>
+    <pre id="code-preview"><code class="code" id="code-sample"></code></pre>
+  </section>
+
 <!-- Problem index drawer -->
 <div id="drawer" hidden>
   <div class="drawer-panel">
@@ -126,6 +158,21 @@
     <div id="drawer-list"></div>
   </div>
   <div class="drawer-scrim" id="drawer-scrim"></div>
+</div>
+
+<!-- Notes modal: kept off the page so the three panes own the whole window -->
+<div id="notes-modal" hidden>
+  <div class="modal-panel notes-panel">
+    <div class="modal-head">
+      <strong>Notes <span class="muted sm">(your own notes.md)</span></strong>
+      <span>
+        <a class="btn ghost sm" id="n-edit" href="#" target="_blank" rel="noopener">Edit on GitHub</a>
+        <button class="btn ghost sm" id="n-close">✕</button>
+      </span>
+    </div>
+    <div class="modal-body md" id="n-body"></div>
+  </div>
+  <div class="drawer-scrim" id="notes-scrim"></div>
 </div>
 
 <!-- History modal -->
@@ -141,6 +188,6 @@
   <div class="drawer-scrim" id="modal-scrim"></div>
 </div>
 
-<script src="assets/app.js"></script>
+<script src="assets/app.js?v=__ASSET_VERSION__"></script>
 </body>
 </html>

@@ -297,8 +297,10 @@ def test_the_sidebar_can_be_hidden_for_a_full_window() -> None:
     assert 'id="rail-show"' in html, "no way to get it back"
     assert "body.rail-hidden #rail{display:none}" in css
     assert "body.rail-hidden #rail-show{display:block}" in css
-    # Folded away entirely rather than left as a strip that still costs width.
-    assert "body.rail-hidden section{padding-left:56px}" in css
+    # The inset for the floating button belongs on the header. Putting it on the view
+    # held the panes 56px off the left edge for a button that sits above them.
+    assert "body.rail-hidden .page-head{padding-left:44px}" in css
+    assert "body.rail-hidden section{padding-left" not in css
     assert 'localStorage.setItem("lv.rail"' in app, "the choice must survive navigation"
 
 
@@ -323,3 +325,211 @@ def test_the_page_still_themes_itself_without_javascript() -> None:
     text on a black ground because one file 404'd is worse than one that ignores a toggle."""
     css = _asset("assets/style.css").read_text(encoding="utf-8")
     assert "@media (prefers-color-scheme: light)" in css
+
+
+def test_a_hidden_view_is_actually_hidden() -> None:
+    """`section{display:flex}` is more specific than the hidden attribute's own
+    display:none, so hiding a view did nothing: every screen stacked onto one page and the
+    problem panes were left with a third of the window."""
+    css = _asset("assets/style.css").read_text(encoding="utf-8")
+    assert "[hidden]{display:none !important}" in css
+
+    # The rule has to come before the one that beat it, and stay stronger than it.
+    assert css.index("[hidden]{") < css.index("section{padding")
+    app = _asset("assets/app.js").read_text(encoding="utf-8")
+    assert '$("view-" + v).hidden = v !== name' in app, "views are toggled by the attribute"
+
+
+def test_the_panes_can_use_the_whole_window() -> None:
+    """A fixed floor would clip on a short window, which is worse than short panes."""
+    css = _asset("assets/style.css").read_text(encoding="utf-8")
+    panes = css.split("#panes{")[1].split("}")[0]
+    assert "flex:1 1 auto" in panes
+    assert "min-height:0" in panes, "a floor here clips instead of shrinking"
+
+
+def test_panes_are_sized_by_proportion_not_pixels() -> None:
+    """Pixel widths saved at one window size cannot fill another: a layout dragged narrow
+    left a band of dead space when the window grew. Every flexible child carries a grow
+    value instead, so it fills whatever it is given."""
+    app = _asset("assets/app.js").read_text(encoding="utf-8")
+    assert "${sizes[node] || 1} 1 0" in app
+    drag = app.split("const move = (ev)")[1].split("};")[0]
+    assert "1 0`" in drag and "px" not in drag, "a drag must set grow, not a pixel width"
+
+
+def test_resizing_a_pair_leaves_every_other_pane_alone() -> None:
+    """Grow is moved between the two panes either side of the handle, so their combined
+    share of the parent is unchanged and nothing else on screen shifts."""
+    app = _asset("assets/app.js").read_text(encoding="utf-8")
+    assert "growTotal" in app
+    assert "* growTotal" in app
+
+
+def test_any_arrangement_is_built_from_one_spec() -> None:
+    """ "Two stacked left, one down the right" is a different tree over the same three
+    elements, not a second copy of the markup."""
+    app = _asset("assets/app.js").read_text(encoding="utf-8")
+    assert 'left2: { label: "Two left, one right", spec: ["row", ["col", "q", "c"], "a"] }' in app
+    assert 'rows: { label: "Three rows", spec: ["col", "q", "c", "a"] }' in app
+    # The panes are moved, never rebuilt, so their scroll position and content survive.
+    assert "Object.values(panes).forEach((el) => el.remove());" in app
+    assert 'localStorage.setItem("lv.layout"' in app
+
+
+def test_each_layout_remembers_its_own_sizes() -> None:
+    """Sizes that made sense as three columns are meaningless as three rows."""
+    app = _asset("assets/app.js").read_text(encoding="utf-8")
+    assert "const sizeKey = () => `lv.sizes.${layoutName}`;" in app
+
+
+def test_a_corrupt_saved_size_does_not_break_the_layout() -> None:
+    app = _asset("assets/app.js").read_text(encoding="utf-8")
+    read = app.split("function readSizes(")[1].split(chr(10) + "}")[0]
+    assert "try {" in read and "catch" in read
+    assert "|| 1" in app, "a missing size falls back to an equal share"
+
+
+def test_the_problem_page_is_only_question_code_and_analysis() -> None:
+    """A permanent notes band under the panes is height taken from all three for something
+    usually collapsed. It opens as a modal instead."""
+    html = _asset("index.html").read_text(encoding="utf-8")
+    app = _asset("assets/app.js").read_text(encoding="utf-8")
+
+    problem = html.split('<section id="view-problem"')[1].split("</section>")[0]
+    assert 'id="panes"' in problem
+    assert 'class="notes"' not in problem, "notes must not sit in the page flow"
+    assert 'id="btn-notes"' in problem, "but it still has to be reachable"
+
+    assert 'id="notes-modal"' in html
+    assert '$("btn-notes").onclick' in app
+    # Escape closes every overlay, including this one.
+    escape = app.split('if (e.key === "Escape")')[1].split("}")[0]
+    assert "notes-modal" in escape
+
+
+def test_hints_render_as_collapsible_details() -> None:
+    """LeetCode writes hints as <details>/<summary> and GitHub renders them natively, so
+    escaping every tag showed the reader raw markup on the 87 problems that have hints.
+    Exactly those three forms pass through - no attributes, nothing else."""
+    node = _node()
+    if node is None:
+        pytest.skip("node is not available")
+
+    script = r"""
+    import { readFileSync } from "node:fs";
+    const src = readFileSync(process.env.APP_JS, "utf8");
+    const mod = src.slice(src.indexOf("function esc("), src.indexOf("/* ---------- fetching"))
+      + "\nexport { markdown };";
+    const { markdown } = await import("data:text/javascript," + encodeURIComponent(mod));
+
+    const html = markdown("<details>\n<summary>Hint 1</summary>\n\nUse a set.\n\n</details>");
+    const hostile = markdown(
+      "<details onclick=alert(1)>\n<img src=x onerror=alert(2)>\n<script>x</script>");
+    const checks = {
+      details: /<details>/.test(html) && /<\/details>/.test(html),
+      summary: /<summary>Hint 1<\/summary>/.test(html),
+      body: /Use a set\./.test(html),
+      noAttributes: !/<details[^>]/.test(hostile) && !/<summary[^>]/.test(hostile),
+      attributedTagEscaped: /&lt;details onclick/.test(hostile),
+      otherTagsEscaped: !/<img|<script/i.test(hostile),
+    };
+    const bad = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
+    if (bad.length) { console.error("failed: " + bad.join(", ") + "\n" + html + "\n" + hostile);
+      process.exit(1); }
+    """
+    import os
+
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env={**os.environ, "APP_JS": str(_asset("assets/app.js"))},
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_the_page_boots_and_renders_a_view() -> None:
+    """A script that throws leaves the static shell on screen - sidebar, no content - which
+    is how a detached-element bug shipped looking like a styling problem.
+
+    The fixture's DOM stub is deliberately strict: getElementById returns an element only
+    while it is attached. An earlier, lenient stub handed back a fresh object for any id and
+    so cheerfully "found" nodes the code had just detached, missing the bug entirely.
+    """
+    node = _node()
+    if node is None:
+        pytest.skip("node is not available")
+
+    import os
+
+    fixture = Path(__file__).resolve().parent / "fixtures" / "boot_page.mjs"
+    for hash_ in ("#/problems", "#/p/two-sum", "#/course", "#/settings"):
+        result = subprocess.run(
+            [node, str(fixture)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env={**os.environ, "APP_JS": str(_asset("assets/app.js")), "BOOT_HASH": hash_},
+        )
+        assert result.returncode == 0, f"{hash_}: {result.stderr[:400]}"
+
+
+def test_assets_are_versioned_so_a_publish_is_not_served_from_cache() -> None:
+    """GitHub Pages sends max-age=600. Without a version in the URL a visitor keeps running
+    the previous script for ten minutes after an update - which is indistinguishable from
+    the update not working, and cost a round trip of "still broken" when it was not."""
+    from leetvault.site import asset_version
+
+    version = asset_version(_asset(""))
+    assert len(version) == 12
+
+    written = _asset("index.html").read_text(encoding="utf-8")
+    assert "__ASSET_VERSION__" in written, "the template carries the placeholder"
+
+
+def test_the_written_page_has_a_real_version_not_the_placeholder(tmp_path: Path) -> None:
+    from leetvault.site import asset_version, write_site
+
+    _problem(tmp_path, "two-sum", 1)
+    write_site(tmp_path, "owner/repo")
+    html = (tmp_path / "index.html").read_text(encoding="utf-8")
+    version = asset_version(_asset(""))
+
+    assert "__ASSET_VERSION__" not in html, "the placeholder must be substituted"
+    assert f"assets/app.js?v={version}" in html
+    assert f"assets/style.css?v={version}" in html
+
+
+def test_the_version_changes_when_the_page_changes(tmp_path: Path) -> None:
+    """A digest of the page's own code: same code, same URL; changed code, new URL."""
+    import shutil
+
+    from leetvault.site import asset_version
+
+    fake = tmp_path / "templates"
+    (fake / "assets").mkdir(parents=True)
+    for name in ("index.html", "assets/app.js", "assets/style.css"):
+        shutil.copyfile(_asset(name), fake / name)
+
+    before = asset_version(fake)
+    assert asset_version(fake) == before, "unchanged input must give the same version"
+    (fake / "assets/app.js").write_text("// different", encoding="utf-8")
+    assert asset_version(fake) != before
+
+
+def test_the_catalogue_is_never_served_from_cache() -> None:
+    """sync rewrites index.json on every run; a stale one paired with a fresh page shows
+    yesterday's problems."""
+    app = _asset("assets/app.js").read_text(encoding="utf-8")
+    assert 'fetch("assets/index.json", { cache: "no-cache" })' in app
+
+
+def test_the_problem_view_reaches_the_window_edges() -> None:
+    """Panes are the whole point of that screen; a wide margin around them is window given
+    to nothing. The header keeps the inset the floating sidebar button needs."""
+    css = _asset("assets/style.css").read_text(encoding="utf-8")
+    assert "#view-problem{padding:8px;gap:8px}" in css
+    section = css.split("section{padding:")[1].split(";")[0]
+    assert section == "10px 12px", f"generic section padding drifted to {section}"
