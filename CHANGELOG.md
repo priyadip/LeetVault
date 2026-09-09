@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-09-09
+
 ### Added
 
 - `leetvault site` builds a browsable web page for the solutions repo and, with `--publish`,
