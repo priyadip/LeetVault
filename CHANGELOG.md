@@ -5,6 +5,36 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- The site highlights code, with the colour scheme chosen in a new **Settings** screen -
+  GitHub Dark or Light, Dracula, Monokai, Solarized, or none - alongside the page theme and
+  the pane layout. The highlighter is self-contained for the same reason as the Markdown
+  renderer: no CDN, no build step. Its correctness rests on matching comments and strings
+  before keywords, so a keyword inside a string is never coloured.
+- **Five pane arrangements** - three columns, two left, two right, one top, three rows -
+  each remembering its own sizes. Any arrangement is a different tree over the same three
+  panes rather than duplicated markup, so all of them resize with the same drag handles.
+- Hints render as collapsible sections, the way GitHub renders them. LeetCode writes them as
+  `<details>`/`<summary>`, and escaping every tag showed raw markup on the 87 problems that
+  have hints. Exactly those forms pass through; anything with attributes stays escaped.
+- Notes moved from a band under the panes into a modal, leaving the problem view to the
+  question, the code and the analysis alone.
+
+### Fixed
+
+- The page rendered nothing but its sidebar. Two causes, a week apart: a hidden view was
+  still displayed because `section{display:flex}` outranked the `hidden` attribute, and the
+  layout engine looked panes up by id after detaching them, where `getElementById` returns
+  null. The test fixture that missed the second one has been replaced with a DOM stub strict
+  enough to catch it - it boots the real page on every route and fails if no view appears.
+- Asset URLs carry a content hash, and the catalogue is fetched with `no-cache`. GitHub
+  Pages serves with `max-age=600`, so an update was invisible for ten minutes - which looks
+  exactly like the update not working.
+- The problem view reaches the window edges. The inset reserved for the floating sidebar
+  button had been applied to the whole view, holding the panes off the left for a button
+  that sits above them.
+
 ## [0.18.0] - 2026-09-09
 
 ### Added

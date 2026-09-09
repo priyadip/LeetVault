@@ -17,8 +17,8 @@ into a second tree and keeping the copies in step forever.
 
 from __future__ import annotations
 
+import hashlib
 import json
-import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TypedDict
@@ -194,14 +194,29 @@ def build_index(repo_path: Path, repo_slug: str, branch: str = "main") -> SiteIn
     }
 
 
+def asset_version(templates: Path) -> str:
+    """A short digest of the page's own code.
+
+    GitHub Pages serves assets with `max-age=600`, so without this a visitor keeps running
+    the previous script for ten minutes after an update - which looked exactly like the fix
+    not working. The version is part of the URL, so a changed script is a different URL.
+    """
+    digest = hashlib.sha256()
+    for name in sorted(SITE_FILES):
+        digest.update((templates / name).read_bytes())
+    return digest.hexdigest()[:12]
+
+
 def write_site(repo_path: Path, repo_slug: str, branch: str = "main") -> list[Path]:
     """Copy the page in and regenerate its index. Returns the files written."""
     written: list[Path] = []
     templates = _templates()
+    version = asset_version(templates)
     for name in SITE_FILES:
         target = repo_path / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(templates / name, target)
+        body = (templates / name).read_text(encoding="utf-8")
+        target.write_text(body.replace("__ASSET_VERSION__", version), encoding="utf-8")
         written.append(target)
 
     nojekyll = repo_path / NOJEKYLL
