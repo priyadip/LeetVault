@@ -71,6 +71,8 @@ INDEX_JSON = "assets/index.json"
 # Pages runs Jekyll by default, which silently drops paths beginning with an underscore and
 # reinterprets others. None of this is a Jekyll site.
 NOJEKYLL = ".nojekyll"
+# What a publish must stage. Everything the page needs, and nothing else in the repo.
+SITE_PATHS = ("index.html", "assets", NOJEKYLL)
 COURSE_DIR = "Course"
 
 
@@ -299,7 +301,18 @@ def run_site(console: Console, *, repo: Path | None, publish: bool, branch: str 
         )
         return
 
-    steps = [_commit_and_push(repo_path, branch), _enable_pages(slug, branch)]
+    # Name the paths. The helper defaults to staging .github for the Q&A bot, so calling it
+    # without them committed nothing here and Pages fell back to rendering README.md - the
+    # publish reported OK while the site was never pushed at all.
+    steps = [
+        _commit_and_push(
+            repo_path,
+            branch,
+            paths=SITE_PATHS,
+            message="leetvault: publish site",
+        ),
+        _enable_pages(slug, branch),
+    ]
     console.print()
     for step in steps:
         mark = "[green]OK[/green]  " if step.ok else "[red]FAIL[/red]"
