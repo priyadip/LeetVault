@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-09-09
+
 ### Fixed
 
 - `leetvault site --publish` now commits the site it just wrote. The commit helper defaults
