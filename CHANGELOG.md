@@ -5,6 +5,22 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.19.2] - 2026-09-12
+
+### Changed
+
+- The architecture and developer docs described the package as it was before the site
+  existed - seven modules were missing from both module maps, and neither mentioned the page.
+  They now carry the part that was never written down: a problem statement is read in two
+  places, by GitHub and by the published page, and keeping those two agreeing is a design
+  constraint. What the renderer commits to, how the claim is checked against GitHub's own
+  output, and what that comparison taught are all recorded. README gains a section on the
+  guarantee and its two visible consequences; FAQ and TROUBLESHOOTING gain the questions a
+  reader arrives with.
+- `htmlmd.py` claimed GitHub renders the `<u>` it passes through. It does not - `u` is not on
+  GitHub's tag allowlist, so its sanitizer drops the tag and shows the text plain. The tag is
+  still kept, for the reason the docstring now gives.
+
 ## [0.19.1] - 2026-09-12
 ### Fixed
 
@@ -582,7 +598,8 @@ Initial release.
 - `watch`: polling loop with graceful shutdown and session-expiry warnings.
 - `config`: get/set persistent settings.
 
-[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.19.1...HEAD
+[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.19.2...HEAD
+[0.19.2]: https://github.com/priyadip/LeetVault/compare/v0.19.1...v0.19.2
 [0.19.1]: https://github.com/priyadip/LeetVault/compare/v0.19.0...v0.19.1
 [0.19.0]: https://github.com/priyadip/LeetVault/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/priyadip/LeetVault/compare/v0.17.1...v0.18.0
