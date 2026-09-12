@@ -308,12 +308,35 @@ embedded in a public page.
 
 The page is plain HTML, CSS and JavaScript with no build step and no CDN - including its
 Markdown renderer and syntax highlighter - so a repo that still exists in five years still
-renders. Writing the renderer by hand puts the burden of correctness on this project, so it
-is held to GitHub's own output: `tests/fixtures/github_markdown.json` records how GitHub
-renders every construct these files contain - images, HTML tables with attributes, nested
-and loose lists, hints, and the overlapping emphasis runs LeetCode writes - and a test
-compares the page against it. Asset URLs carry a content hash, so an update is never served
-from a stale cache.
+renders. Asset URLs carry a content hash, so an update is never served from a stale cache.
+
+#### Rendered the way GitHub renders it
+
+Every problem page links to the same file on GitHub, so the two showing different documents
+would read as one of them being broken. The page's renderer is therefore written against
+GitHub's own output as its specification, not against a Markdown standard in the abstract.
+
+That covers what these files actually contain: images; tables written as HTML, which is how
+LeetCode writes several of them; tables that run past their last real row; nested and loose
+lists; hints as collapsible sections; hard line breaks; bare URLs; code spans that cross a
+line ending; indented code; fenced code with a language, which is highlighted; setext
+headings; table alignment and escaped pipes; entities; backslash escapes; strikethrough; and
+the overlapping emphasis runs LeetCode writes, such as
+`*the **lexicographically smallest* *subsequence** of*`, which need CommonMark's
+delimiter-run algorithm to close in the right order.
+
+It matches GitHub on **all 446** `question.md`, `analysis.md` and `notes.md` files of a
+149-problem repository. Because that check needs the network, GitHub's own rendering of 35
+constructs drawn from those files is recorded in `tests/fixtures/github_markdown.json`, and a
+test holds the page to it offline - see [docs/DEVELOPER.md](docs/DEVELOPER.md) to regenerate
+it and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the reasoning.
+
+Two consequences worth knowing. **`<u>` is not underlined**, because GitHub's sanitizer drops
+that tag - a subsequence LeetCode underlines renders as plain text on github.com, and the
+page matches GitHub rather than LeetCode. And **no attribute survives** on any tag except an
+`href` on `<a>` and a `src` on `<img>`, and only one that is http, https, mailto, a fragment
+or relative: `analysis.md` is model-generated and `notes.md` is free-form, so both are
+untrusted input, and a tag rebuilt from its name alone leaves no room for an `onerror=`.
 
 ## Command reference
 

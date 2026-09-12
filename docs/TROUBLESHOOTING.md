@@ -96,3 +96,40 @@ you still see this, you're likely running a very old leetvault build - please up
   resolved DB and repo paths.
 - Sync state / submissions: `leetvault status`, or inspect the SQLite DB directly at the path
   `leetvault config db_path` reports.
+
+## A table or an image in a problem statement doesn't render on the page
+
+Upgrade and re-publish the page:
+
+```bash
+pip install -U leetvault
+leetvault site --publish
+```
+
+Versions before 0.19.1 escaped tables that LeetCode writes as HTML, so they appeared as
+`<tr><td>` text, and did not render Markdown images at all. The page's code is part of the
+package, so a page published by an older version keeps its older renderer until `leetvault
+site` writes the new one in - syncing alone does not replace it, because sync only refreshes
+the catalogue.
+
+## The page doesn't show a change I just published
+
+GitHub Pages serves assets with `max-age=600`, so a browser can keep running the previous
+script for up to ten minutes - which looks exactly like the change not working. Since 0.19.0
+the page's asset URLs carry a content hash, so a changed script is a different URL and this
+resolves itself; a hard reload settles it immediately. Confirm which version is live with:
+
+```bash
+curl -s https://<you>.github.io/<repo>/index.html | grep -o "app.js?v=[a-f0-9]*"
+```
+
+If that hash does not change after `leetvault site --publish`, the publish did not reach
+GitHub - check the command's own output, and that `git log` in the repo shows the commit.
+
+## The page renders something differently from GitHub
+
+It should not: the page's renderer is written against GitHub's own output, and is checked
+against it. If you find a file where the two differ, that is a bug worth reporting - include
+the file, since the fix is to add it to `tests/fixtures/github_markdown.json` so it stays
+fixed. `docs/DEVELOPER.md` describes how that fixture is regenerated.
+

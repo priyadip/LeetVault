@@ -66,3 +66,29 @@ privilege leetvault actually needs.
 step will fail with a clear error (with the PAT scrubbed from any message) and the tool will
 tell you to check `leetvault login` again. Nothing is lost - the next successful run will push
 everything, including anything that piled up while the PAT was broken.
+
+**Does the web page show my problems differently from GitHub?**
+No, and that is enforced rather than hoped for. `leetvault site` publishes a page whose
+Markdown renderer is written against GitHub's own output as its specification, and it matches
+GitHub on every `question.md`, `analysis.md` and `notes.md` file of a real 149-problem
+repository. A recorded sample of GitHub's rendering lives in
+`tests/fixtures/github_markdown.json` so a test can hold the page to it without the network.
+
+**Why is an underlined part of a problem statement not underlined on the page?**
+Because it is not underlined on GitHub either. LeetCode marks a matched subsequence with
+`<u>`, but `<u>` is not on GitHub's tag allowlist, so GitHub's sanitizer drops it and renders
+the text plain. The page matches GitHub, which means the underline is lost in both places.
+Anything the statement expresses in Markdown - bold, code, tables, images - is unaffected.
+
+**The page is static. Is it safe that it renders files an AI wrote?**
+`analysis.md` is model-generated and `notes.md` can be edited by anyone with push access, so
+both are treated as untrusted. Every tag is rebuilt from its name alone, so no attribute
+survives - there is nowhere for an `onerror=` to go. The only exceptions are `href` on `<a>`
+and `src` on `<img>`, which keep a URL only if it is http, https, mailto, a fragment, or
+relative with no scheme; `javascript:` never reaches the page.
+
+**Do I need to re-run `leetvault site` after solving a new problem?**
+No. `sync` refreshes the catalogue, and the page reads `Problems/<slug>/...` directly, so new
+problems and any file you edit on GitHub show up without regenerating the page. Re-run
+`leetvault site` when you upgrade leetvault, to pick up a newer version of the page itself.
+
