@@ -6,9 +6,15 @@ actually uses, measured across a real account's solved problems rather than gues
 plus `table/thead/tbody/tr/td/th`.
 
 Markdown has no syntax for tables-from-HTML or underline, so those tags are passed through
-as raw HTML (which Markdown explicitly permits and GitHub renders) instead of being
-flattened into mangled text. Everything else becomes real Markdown, so the file stays
-readable as plain text in an editor, in `git diff`, and in non-GitHub viewers.
+as raw HTML - which Markdown explicitly permits - instead of being flattened into mangled
+text. Everything else becomes real Markdown, so the file stays readable as plain text in an
+editor, in `git diff`, and in non-GitHub viewers.
+
+The two are not equal in how they survive. GitHub renders the table; it does *not* render the
+underline, because `u` is not on its tag allowlist, so its sanitizer drops the tag and shows
+the text plain. `u` is kept here anyway: it is what LeetCode wrote, it costs a reader nothing
+where it is ignored, and a viewer that does honour it shows more than GitHub does rather than
+less. The site's renderer matches GitHub and so drops it too - see docs/ARCHITECTURE.md.
 
 Built on stdlib `html.parser` rather than a regex pass, so nesting is tracked correctly,
 and rather than taking a new dependency for one feature.
@@ -19,7 +25,8 @@ from __future__ import annotations
 import re
 from html.parser import HTMLParser
 
-# Emitted verbatim as HTML: Markdown cannot express these, and flattening them loses data.
+# Emitted verbatim as HTML: Markdown cannot express these, and flattening them loses
+# data. GitHub renders the table and drops the underline; see the module docstring.
 _PASSTHROUGH_TREES = {"table"}
 _PASSTHROUGH_INLINE = {"u"}
 

@@ -14,6 +14,13 @@ leetvault CLI (Typer)
    +-- git_writer.py -- disk layout writer, commit rendering, transient-PAT push
    +-- readme.py   -- Jinja2 dashboard README generation from DB stats
    +-- watch.py    -- polling loop: sync -> write -> README -> commit -> push
+   +-- htmlmd.py   -- LeetCode's question.content (HTML) -> Markdown, at sync time
+   +-- ai_setup.py -- `leetvault ai`: detect AI backends, choose one, or turn it off
+   +-- analyze.py  -- `leetvault analyze`: redo one analysis with a different model
+   +-- ask.py      -- `leetvault ask`: a question about one problem, answered and logged
+   +-- bot.py      -- `leetvault bot`: a GitHub Actions workflow that answers issues
+   +-- site.py     -- `leetvault site`: a browsable GitHub Pages site for the repo
+   +-- commands.py -- `leetvault commands`: every command, generated from the CLI itself
 ```
 
 Every LeetCode network access is isolated behind `client.py` — no other module talks HTTP
@@ -46,6 +53,88 @@ easy to localize.
 - `topics` + `problem_topics` (M2M)
 - `sync_state` (`id`, `site`, `last_offset`, `last_submission_id`, `last_synced_timestamp`,
   `last_full_import_completed_at`)
+
+## The problem statement: one file, two renderers
+
+A LeetCode problem statement arrives as HTML and is read in two places, and keeping those two
+places agreeing is a design constraint rather than a detail. Every problem page on the site
+links to the same file on GitHub, so if the two render it differently, a reader moving between
+them concludes one of them is broken.
+
+```
+LeetCode question.content (HTML)
+   |
+   +-- htmlmd.py ............ HTML -> Markdown, at sync time, on the machine running leetvault
+   |      |
+   |      v
+   |   Problems/<slug>/question.md   (committed; also analysis.md, notes.md)
+   |      |
+   |      +--> GitHub renders it .................... github.com/<you>/<repo>
+   |      |
+   |      +--> templates/site/assets/app.js renders it .... <you>.github.io/<repo>/
+```
+
+`htmlmd.py` handles exactly the tag vocabulary LeetCode's `question.content` actually uses,
+measured across a real account rather than guessed. Most of it becomes real Markdown, so the
+file stays readable in an editor and in `git diff`. `<table>` is the exception it passes
+through as raw HTML, because Markdown has no syntax for a table that came from HTML and
+flattening one loses data.
+
+The renderer in `app.js` is hand-written for the same reason the syntax highlighter is: no
+CDN and no build step, so a repository that still exists in five years still renders. That
+choice puts the burden of correctness on this project, and the way that burden is discharged
+is to treat **GitHub's own output as the specification** rather than a Markdown spec in the
+abstract.
+
+### What the renderer commits to
+
+- **Tags are rebuilt, never passed through.** A tag is re-emitted from its name alone, so no
+  attribute survives - which is what leaves no room for an `onerror=` in an `analysis.md` that
+  a model wrote or a `notes.md` that anyone with push access can edit. Attributes are stripped
+  rather than treated as disqualifying, because LeetCode's own tables carry
+  `style="border: 1px solid black;"` and refusing those tags would put the raw markup back on
+  screen.
+- **`<a>` and `<img>` are the two exceptions**, because for them the attribute *is* the
+  content. Each keeps exactly one - its `href` or `src` - and only the one `safeUrl` accepts:
+  http, https, mailto, a fragment, or a relative path with no scheme at all. `javascript:`
+  never reaches the document.
+- **A tag GitHub does not permit is dropped, with its text kept** - which is what GitHub's own
+  sanitizer does with it.
+- **Emphasis uses CommonMark's delimiter-run algorithm**, not a chain of patterns. This is not
+  gold-plating: LeetCode's statements contain overlapping runs such as
+  `*the **lexicographically smallest* *subsequence** of*`, and a pattern chain closes those in
+  the wrong order and emits tags that cross.
+
+### How the claim is checked
+
+GitHub's `/markdown` endpoint renders a file the same way github.com does, which makes it
+usable as an oracle. Both sides are reduced to the sequence of tags and text a reader actually
+perceives - attributes dropped, whitespace collapsed, `<pre>` treated as one blob, GitHub's
+heading permalinks and `tbody` ignored (every parser inserts a `tbody`, so whether the string
+carries one is not something a reader can perceive).
+
+Against a real synced repository of 149 problems - all 446 `question.md`, `analysis.md` and
+`notes.md` files - the two agree on every file.
+
+That check needs the network, so it cannot run in CI. `tests/fixtures/github_markdown.json`
+records GitHub's output for 35 constructs drawn from those same files, and a test in
+`tests/test_site.py` holds the renderer to it with no network at all. Regenerate it with
+`tests/fixtures/gen_github_markdown.py` when a construct is added; see `docs/DEVELOPER.md`.
+
+### What that comparison taught, that a specification would not have
+
+- **GitHub's sanitizer drops `<u>`.** It is not on GitHub's tag allowlist, so a subsequence
+  LeetCode underlines is *not* underlined on github.com - it renders as plain text. `htmlmd.py`
+  passes `<u>` through on the assumption GitHub renders it; GitHub does not, and the site
+  matches GitHub rather than the assumption.
+- **A GFM table does not end at its last row.** It ends at a blank line or the start of another
+  block, so a trailing `Result: 5.` written under a table becomes one more row, padded out to
+  the header's width. Several analyses are written exactly that way.
+- **A list marker indented four spaces is not a list.** With a paragraph open it is a lazy
+  continuation of it, which is how the nested steps in several analyses are written.
+- **GitHub Pages serves assets with `max-age=600`.** Without a content hash in the URL a
+  visitor keeps running the previous script for ten minutes after an update, which looks
+  exactly like the update not working. `asset_version()` makes a changed script a changed URL.
 
 ## Notes from building against the live, undocumented LeetCode API
 
