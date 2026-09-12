@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
@@ -193,7 +194,8 @@ def test_markdown_renderer_handles_what_these_files_contain() -> None:
     script = """
     import { readFileSync } from "node:fs";
     const src = readFileSync(process.env.APP_JS, "utf8");
-    const mod = src.slice(src.indexOf("function esc("), src.indexOf("/* ---------- fetching"))
+    const mod = src.slice(src.indexOf("/* ---------- Markdown"),
+      src.indexOf("/* ---------- fetching"))
       + "\\nexport { markdown };";
     const { markdown } = await import("data:text/javascript," + encodeURIComponent(mod));
     const html = markdown([
@@ -204,12 +206,13 @@ def test_markdown_renderer_handles_what_these_files_contain() -> None:
     const hostile = markdown("<img src=x onerror=alert(1)>");
     const checks = {
       heading: /<h2>Complexity<\\/h2>/.test(html),
-      fence: /<pre><code class="code">x = 1  # a &lt; b<\\/code><\\/pre>/.test(html),
+      fence: /<pre><code class="code">/.test(html) && /<[/]code><[/]pre>/.test(html)
+        && /class="t-com"># a &lt; b<[/]span>/.test(html),
       table: /<th>Step<\\/th>/.test(html) && /<td>store <code>2<\\/code><\\/td>/.test(html),
       bullets: /<ul><li>bulleted<\\/li><\\/ul>/.test(html),
       numbered: /<ol><li>numbered<\\/li><\\/ol>/.test(html),
       quote: /<blockquote>/.test(html),
-      escaped: !/<img/i.test(hostile),
+      srcKeptHandlerDropped: /<img src="x"/.test(hostile) && !/onerror/i.test(hostile),
     };
     const bad = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
     if (bad.length) { console.error("failed: " + bad.join(", ") + "\\n" + html); process.exit(1); }
@@ -411,7 +414,8 @@ def test_the_problem_page_is_only_question_code_and_analysis() -> None:
 def test_hints_render_as_collapsible_details() -> None:
     """LeetCode writes hints as <details>/<summary> and GitHub renders them natively, so
     escaping every tag showed the reader raw markup on the 87 problems that have hints.
-    Exactly those three forms pass through - no attributes, nothing else."""
+    GitHub keeps the tag and drops the attribute, and so does this - a rebuild that emits the
+    name alone is what makes onclick= and onerror= unable to survive."""
     node = _node()
     if node is None:
         pytest.skip("node is not available")
@@ -419,7 +423,8 @@ def test_hints_render_as_collapsible_details() -> None:
     script = r"""
     import { readFileSync } from "node:fs";
     const src = readFileSync(process.env.APP_JS, "utf8");
-    const mod = src.slice(src.indexOf("function esc("), src.indexOf("/* ---------- fetching"))
+    const mod = src.slice(src.indexOf("/* ---------- Markdown"),
+      src.indexOf("/* ---------- fetching"))
       + "\nexport { markdown };";
     const { markdown } = await import("data:text/javascript," + encodeURIComponent(mod));
 
@@ -431,8 +436,8 @@ def test_hints_render_as_collapsible_details() -> None:
       summary: /<summary>Hint 1<\/summary>/.test(html),
       body: /Use a set\./.test(html),
       noAttributes: !/<details[^>]/.test(hostile) && !/<summary[^>]/.test(hostile),
-      attributedTagEscaped: /&lt;details onclick/.test(hostile),
-      otherTagsEscaped: !/<img|<script/i.test(hostile),
+      attributeDropped: /<details>/.test(hostile) && !/onclick/.test(hostile),
+      scriptDropped: !/<script/i.test(hostile) && !/onerror|onclick/i.test(hostile),
     };
     const bad = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k);
     if (bad.length) { console.error("failed: " + bad.join(", ") + "\n" + html + "\n" + hostile);
@@ -533,3 +538,120 @@ def test_the_problem_view_reaches_the_window_edges() -> None:
     assert "#view-problem{padding:8px;gap:8px}" in css
     section = css.split("section{padding:")[1].split(";")[0]
     assert section == "10px 12px", f"generic section padding drifted to {section}"
+
+
+# Ignored on both sides of the comparison below: GitHub wraps every heading in a permalink
+# anchor and decorates its output with attributes the reader never sees. `tbody` is ignored
+# for a different reason - every HTML parser inserts one into a table that omits it, so
+# whether the string carries it is not something a reader can perceive. `thead` is not in
+# this set, because no parser inserts that one.
+_SKIP_TAGS = {"a", "article", "svg", "path", "g", "div", "span", "input", "tbody"}
+NL = chr(10)
+
+
+class _Shape(HTMLParser):
+    """Reduces HTML to the sequence of tags and text a reader actually perceives.
+
+    Attributes are dropped, whitespace is collapsed, and a <pre> becomes one blob of text -
+    GitHub colours its code with spans, this page colours it with different ones, and that
+    difference is not what this comparison is about.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.tokens: list[str] = []
+        self.pre = 0
+        self.buf: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: object) -> None:
+        if tag == "pre":
+            self.pre += 1
+            self.tokens.append("<pre>")
+        elif not self.pre and tag not in _SKIP_TAGS:
+            self.tokens.append(f"<{tag}>")
+
+    def handle_startendtag(self, tag: str, attrs: object) -> None:
+        if not self.pre and tag not in _SKIP_TAGS:
+            self.tokens.append(f"<{tag}>")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "pre" and self.pre:
+            self.pre -= 1
+            self.tokens.append(" ".join("".join(self.buf).split()))
+            self.tokens.append("</pre>")
+            self.buf = []
+        elif not self.pre and tag not in _SKIP_TAGS:
+            self.tokens.append(f"</{tag}>")
+
+    def handle_data(self, data: str) -> None:
+        if self.pre:
+            self.buf.append(data)
+            return
+        text = " ".join(data.split())
+        if text:
+            self.tokens.append(text)
+
+
+def _shape(html: str) -> list[str]:
+    parser = _Shape()
+    parser.feed(html)
+    merged: list[str] = []
+    for token in parser.tokens:
+        # Adjacent text is joined so that the same sentence, split differently by tags that
+        # were dropped, still compares equal.
+        if merged and not token.startswith("<") and not merged[-1].startswith("<"):
+            merged[-1] = f"{merged[-1]} {token}"
+        else:
+            merged.append(token)
+    return merged
+
+
+def test_markdown_matches_github_on_recorded_samples() -> None:
+    """The page and GitHub must render the same file the same way.
+
+    Readers move between the two - the page links to GitHub on every problem - so a
+    difference reads as one of them being broken. The fixture holds GitHub's own output for
+    constructs taken from real problem statements: images, HTML tables with style attributes,
+    a table whose last line is not a row, nested and loose lists, hints, and the overlapping
+    emphasis runs LeetCode writes, such as "*the **smallest* *subsequence** of*". Regenerate
+    it with tests/fixtures/gen_github_markdown.py when a construct is added.
+    """
+    node = _node()
+    if node is None:
+        pytest.skip("node is not available")
+
+    fixture = Path(__file__).parent / "fixtures" / "github_markdown.json"
+    samples = json.loads(fixture.read_text(encoding="utf-8"))
+
+    script = """
+    import { readFileSync } from "node:fs";
+    const src = readFileSync(process.env.APP_JS, "utf8");
+    const mod = src.slice(src.indexOf("/* ---------- Markdown"),
+      src.indexOf("/* ---------- fetching")) + "export { markdown };";
+    const { markdown } = await import("data:text/javascript," + encodeURIComponent(mod));
+    const samples = JSON.parse(readFileSync(process.env.FIXTURE, "utf8"));
+    const out = {};
+    for (const [name, s] of Object.entries(samples)) out[name] = markdown(s.markdown);
+    process.stdout.write(JSON.stringify(out));
+    """
+    import os
+
+    result = subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env={**os.environ, "APP_JS": str(_asset("assets/app.js")), "FIXTURE": str(fixture)},
+    )
+    assert result.returncode == 0, result.stderr
+    rendered = json.loads(result.stdout)
+
+    differing = {
+        name: (_shape(rendered[name]), _shape(sample["github"]))
+        for name, sample in samples.items()
+        if _shape(rendered[name]) != _shape(sample["github"])
+    }
+    assert not differing, "\n".join(
+        f"{name}{NL}  ours  : {ours}{NL}  github: {theirs}"
+        for name, (ours, theirs) in differing.items()
+    )

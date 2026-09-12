@@ -1,0 +1,142 @@
+{
+ "angle_not_a_tag": {
+  "github": "<table>\n<thead>\n<tr>\n<th>a</th>\n<th>b</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>x&gt;=fm, x&lt;smi</td>\n<td>2</td>\n</tr>\n</tbody>\n</table>\n",
+  "markdown": "| a | b |\n|---|---|\n| x>=fm, x<smi | 2 |"
+ },
+ "backslash_escape": {
+  "github": "<p>Literal *not emphasis* and | pipe.</p>\n",
+  "markdown": "Literal \\*not emphasis\\* and \\| pipe."
+ },
+ "bare_url": {
+  "github": "<p>See <a href=\"https://leetcode.com/problems/two-sum/\" rel=\"nofollow\">https://leetcode.com/problems/two-sum/</a> for details.</p>\n",
+  "markdown": "See https://leetcode.com/problems/two-sum/ for details."
+ },
+ "blockquote": {
+  "github": "<blockquote>\n<p>Note that the array is <strong>sorted</strong>.\nSecond line.</p>\n</blockquote>\n",
+  "markdown": "> Note that the array is **sorted**.\n> Second line."
+ },
+ "code_span_across_lines": {
+  "github": "<p>The mapping is:</p>\n<p><code>\"1\" -&gt; A \"2\" -&gt; B ... \"26\" -&gt; Z</code></p>\n<p>Given a string, decode it.</p>\n",
+  "markdown": "The mapping is:\n\n`\"1\" -> A\n\"2\" -> B\n...\n\"26\" -> Z`\n\nGiven a string, decode it."
+ },
+ "deep_indent_not_a_list": {
+  "github": "<ol start=\"5\">\n<li>While <code>size &lt; n</code>:\na. Set <code>prev = dummy</code>.\nb. While <code>curr</code> is not <code>None</code>:\n- <code>left = curr</code>.\n- <code>right = split(left, size)</code>.</li>\n</ol>\n",
+  "markdown": "5. While `size < n`:\n   a. Set `prev = dummy`.\n   b. While `curr` is not `None`:\n        - `left = curr`.\n        - `right = split(left, size)`."
+ },
+ "details_hint": {
+  "github": "<div class=\"markdown-heading\"><h2 class=\"heading-element\">Hints</h2><a id=\"user-content-hints\" class=\"anchor\" aria-label=\"Permalink: Hints\" href=\"#hints\"><span aria-hidden=\"true\" class=\"octicon octicon-link\"></span></a></div>\n<details>\n<summary>Hint 1</summary>\n<p>Use a hash map.</p>\n</details>\n<details>\n<summary>Hint 2</summary>\n<p>Then a <code>set</code>.</p>\n</details>\n",
+  "markdown": "## Hints\n\n<details>\n<summary>Hint 1</summary>\n\nUse a hash map.\n\n</details>\n<details>\n<summary>Hint 2</summary>\n\nThen a `set`.\n\n</details>"
+ },
+ "emphasis_after_code_span": {
+  "github": "<p>Return the length of the subarray of <code>nums</code> <em>.</em></p>\n",
+  "markdown": "Return the length of the subarray of `nums` *.*"
+ },
+ "emphasis_overlapping": {
+  "github": "<p>Given a string <code>s</code>, return <em>the <em><em>lexicographically smallest</em> <em>subsequence</em></em> of</em> <code>s</code> <em>that contains all the distinct characters</em>.</p>\n",
+  "markdown": "Given a string `s`, return *the **lexicographically smallest* *subsequence** of* `s` *that contains all the distinct characters*."
+ },
+ "emphasis_quadruple": {
+  "github": "<p>Given two strings s and t, return <em>the number of distinct</em> <em><strong>subsequences</strong></em>* of <em>s</em> which equals <em>t.</em></p>\n",
+  "markdown": "Given two strings s and t, return *the number of distinct* ***subsequences**** of *s* which equals *t.*"
+ },
+ "emphasis_spaced_delimiter": {
+  "github": "<p><code>n</code> is divisible by the **sum **of the following two values:</p>\n",
+  "markdown": "`n` is divisible by the **sum **of the following two values:"
+ },
+ "emphasis_underscore_intraword": {
+  "github": "<p>Set <code>min_s</code> and <em>emphasis</em> and snake_case_name and <strong>strong</strong>.</p>\n",
+  "markdown": "Set `min_s` and _emphasis_ and snake_case_name and __strong__."
+ },
+ "empty_list_item": {
+  "github": "<p>Values:</p>\n<ul>\n<li>\n</li><li>\n</li><li>Sum of the first 4 odd numbers <code>sumOdd = 16</code>\n</li>\n</ul>\n",
+  "markdown": "Values:\n\n-\n-\n- Sum of the first 4 odd numbers `sumOdd = 16`"
+ },
+ "entities": {
+  "github": "<p>Compare a &lt; b and &amp; and 'quoted'.</p>\n",
+  "markdown": "Compare a &lt; b and &amp; and &#39;quoted&#39;."
+ },
+ "fenced_python": {
+  "github": "<div class=\"highlight highlight-source-python\"><pre><span class=\"pl-k\">def</span> <span class=\"pl-en\">f</span>(<span class=\"pl-s1\">x</span>):\n    <span class=\"pl-k\">return</span> <span class=\"pl-s1\">x</span>  <span class=\"pl-c\"># a &lt; b</span></pre></div>\n",
+  "markdown": "```python\ndef f(x):\n    return x  # a < b\n```"
+ },
+ "hard_break": {
+  "github": "<ul>\n<li>\n<code>y = 2</code>, <code>cnt[2] = 1</code>.<br>\nBuild suffix from <code>cnt</code>.<br>\nReturn <code>\"bca\"</code>.</li>\n</ul>\n",
+  "markdown": "- `y = 2`, `cnt[2] = 1`.  \nBuild suffix from `cnt`.  \nReturn `\"bca\"`."
+ },
+ "html_table": {
+  "github": "<p>Seven symbols:</p>\n<table>\n\t<thead>\n\t\t<tr>\n\t\t\t<th>Symbol</th>\n\t\t\t<th>Value</th>\n\t\t</tr>\n\t</thead>\n\t<tbody>\n\t\t<tr>\n\t\t\t<td>I</td>\n\t\t\t<td>1</td>\n\t\t</tr>\n\t\t<tr>\n\t\t\t<td>V</td>\n\t\t\t<td>5</td>\n\t\t</tr>\n\t</tbody>\n</table>\n<p>After the table.</p>\n",
+  "markdown": "Seven symbols:\n\n<table>\n\t<thead>\n\t\t<tr>\n\t\t\t<th>Symbol</th>\n\t\t\t<th>Value</th>\n\t\t</tr>\n\t</thead>\n\t<tbody>\n\t\t<tr>\n\t\t\t<td>I</td>\n\t\t\t<td>1</td>\n\t\t</tr>\n\t\t<tr>\n\t\t\t<td>V</td>\n\t\t\t<td>5</td>\n\t\t</tr>\n\t</tbody>\n</table>\n\nAfter the table."
+ },
+ "html_table_with_attributes": {
+  "github": "<table>\n<tbody><tr>\n<th><code>i</code></th>\n<th><code>mx<sub>i</sub></code></th>\n</tr>\n</tbody></table>\n",
+  "markdown": "<table>\n<tr>\n<th style=\"border: 1px solid black;\"><code>i</code></th>\n<th style=\"border: 1px solid black;\"><code>mx<sub>i</sub></code></th>\n</tr>\n</table>"
+ },
+ "image": {
+  "github": "<p><strong>Example 1:</strong>\n<a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https://camo.githubusercontent.com/a8d67f4b30fa7550de5359c12ea15e8a742604b9b96174684260af70ee08276d/68747470733a2f2f6173736574732e6c656574636f64652e636f6d2f75706c6f6164732f323031382f31302f32322f7261696e7761746572747261702e706e67\"><img src=\"https://camo.githubusercontent.com/a8d67f4b30fa7550de5359c12ea15e8a742604b9b96174684260af70ee08276d/68747470733a2f2f6173736574732e6c656574636f64652e636f6d2f75706c6f6164732f323031382f31302f32322f7261696e7761746572747261702e706e67\" alt=\"\" data-canonical-src=\"https://assets.leetcode.com/uploads/2018/10/22/rainwatertrap.png\" style=\"max-width: 100%;\"></a></p>\n<pre><code>Input: height = [0,1]\n</code></pre>\n",
+  "markdown": "**Example 1:**\n ![](https://assets.leetcode.com/uploads/2018/10/22/rainwatertrap.png)\n```\nInput: height = [0,1]\n```"
+ },
+ "image_with_alt": {
+  "github": "<p>Here it is: <a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https://camo.githubusercontent.com/a8d67f4b30fa7550de5359c12ea15e8a742604b9b96174684260af70ee08276d/68747470733a2f2f6173736574732e6c656574636f64652e636f6d2f75706c6f6164732f323031382f31302f32322f7261696e7761746572747261702e706e67\"><img src=\"https://camo.githubusercontent.com/a8d67f4b30fa7550de5359c12ea15e8a742604b9b96174684260af70ee08276d/68747470733a2f2f6173736574732e6c656574636f64652e636f6d2f75706c6f6164732f323031382f31302f32322f7261696e7761746572747261702e706e67\" alt=\"elevation map\" data-canonical-src=\"https://assets.leetcode.com/uploads/2018/10/22/rainwatertrap.png\" style=\"max-width: 100%;\"></a> and text after.</p>\n",
+  "markdown": "Here it is: ![elevation map](https://assets.leetcode.com/uploads/2018/10/22/rainwatertrap.png) and text after."
+ },
+ "indented_code": {
+  "github": "<p>Paragraph.</p>\n<pre><code>line one\nline two\n</code></pre>\n<p>After.</p>\n",
+  "markdown": "Paragraph.\n\n    line one\n    line two\n\nAfter."
+ },
+ "link_with_emphasis": {
+  "github": "<p><a href=\"https://leetcode.com/problems/x/\" rel=\"nofollow\"><strong>Container With Most Water</strong></a> - Medium</p>\n",
+  "markdown": "[**Container With Most Water**](https://leetcode.com/problems/x/) - Medium"
+ },
+ "nested_loose_list": {
+  "github": "<ul>\n<li>\n<p>A valid sequence of moves is as follows:</p>\n<ul>\n<li>Move 1: From <code>(0, 0)</code> to <code>(0, 1)</code>.</li>\n<li>Move 2: From <code>(0, 1)</code> to <code>(1, 1)</code>.</li>\n</ul>\n</li>\n<li>\n<p>The student collects all the litter using 2 moves.</p>\n</li>\n</ul>\n",
+  "markdown": "- A valid sequence of moves is as follows:\n\n  - Move 1: From `(0, 0)` to `(0, 1)`.\n  - Move 2: From `(0, 1)` to `(1, 1)`.\n\n- The student collects all the litter using 2 moves."
+ },
+ "ordered_list_start": {
+  "github": "<ol start=\"3\">\n<li>third</li>\n<li>fourth</li>\n<li>fifth</li>\n</ol>\n",
+  "markdown": "3. third\n4. fourth\n5. fifth"
+ },
+ "pipe_table_alignment": {
+  "github": "<table>\n<thead>\n<tr>\n<th align=\"left\">Left</th>\n<th align=\"center\">Mid</th>\n<th align=\"right\">Right</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td align=\"left\">a</td>\n<td align=\"center\">b</td>\n<td align=\"right\">c</td>\n</tr>\n</tbody>\n</table>\n",
+  "markdown": "| Left | Mid | Right |\n|:-----|:---:|------:|\n| a | b | c |"
+ },
+ "pipe_table_escaped_pipe": {
+  "github": "<table>\n<thead>\n<tr>\n<th>A</th>\n<th>B</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>a | b</td>\n<td>c</td>\n</tr>\n</tbody>\n</table>\n",
+  "markdown": "| A | B |\n|---|---|\n| a \\| b | c |"
+ },
+ "pipe_table_trailing_line": {
+  "github": "<table>\n<thead>\n<tr>\n<th>Step</th>\n<th>p</th>\n<th>Action</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>1</td>\n<td>7</td>\n<td>max_p = 0</td>\n</tr>\n<tr>\n<td>2</td>\n<td>1</td>\n<td>max_p = 0</td>\n</tr>\n<tr>\n<td>Result: 5.</td>\n<td></td>\n<td></td>\n</tr>\n</tbody>\n</table>\n<div class=\"markdown-heading\"><h2 class=\"heading-element\">Complexity</h2><a id=\"user-content-complexity\" class=\"anchor\" aria-label=\"Permalink: Complexity\" href=\"#complexity\"><span aria-hidden=\"true\" class=\"octicon octicon-link\"></span></a></div>\n",
+  "markdown": "| Step | p | Action |\n|------|---|--------|\n| 1 | 7 | max_p = 0 |\n| 2 | 1 | max_p = 0 |\nResult: 5.\n\n## Complexity"
+ },
+ "raw_html_image": {
+  "github": "<p>Diagram: <a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https://camo.githubusercontent.com/0f1159a50ac73a5362cc5694ba5512be87c153c81ba6464270f4f77e858fd932/68747470733a2f2f6173736574732e6c656574636f64652e636f6d2f75706c6f6164732f782e706e67\"><img src=\"https://camo.githubusercontent.com/0f1159a50ac73a5362cc5694ba5512be87c153c81ba6464270f4f77e858fd932/68747470733a2f2f6173736574732e6c656574636f64652e636f6d2f75706c6f6164732f782e706e67\" alt=\"map\" data-canonical-src=\"https://assets.leetcode.com/uploads/x.png\" style=\"max-width: 100%;\"></a> after.</p>\n",
+  "markdown": "Diagram: <img src=\"https://assets.leetcode.com/uploads/x.png\" alt=\"map\"> after."
+ },
+ "raw_html_link": {
+  "github": "<p>Visit <a href=\"https://example.com/x\" rel=\"nofollow\">the site</a> today.</p>\n",
+  "markdown": "Visit <a href=\"https://example.com/x\">the site</a> today."
+ },
+ "raw_html_unsafe_link": {
+  "github": "<p>Click here please.</p>\n",
+  "markdown": "Click <a href=\"javascript:alert(1)\">here</a> please."
+ },
+ "setext_and_hr": {
+  "github": "<div class=\"markdown-heading\"><h2 class=\"heading-element\">Heading text</h2><a id=\"user-content-heading-text\" class=\"anchor\" aria-label=\"Permalink: Heading text\" href=\"#heading-text\"><span aria-hidden=\"true\" class=\"octicon octicon-link\"></span></a></div>\n<p>Body.</p>\n<hr>\n<p><em>Footer text.</em></p>\n",
+  "markdown": "Heading text\n---\n\nBody.\n\n---\n\n_Footer text._"
+ },
+ "strikethrough": {
+  "github": "<p>This is <del>removed</del> text.</p>\n",
+  "markdown": "This is ~~removed~~ text."
+ },
+ "tight_list": {
+  "github": "<ul>\n<li>\n<strong>Step 1</strong> - For <code>curr</code>, do the thing.</li>\n<li>\n<strong>Step 2</strong> - Then do the other thing.</li>\n<li>\n<strong>Step 3</strong> - Return <code>ans</code>.</li>\n</ul>\n",
+  "markdown": "- **Step 1** - For `curr`, do the thing.\n- **Step 2** - Then do the other thing.\n- **Step 3** - Return `ans`."
+ },
+ "u_tag": {
+  "github": "<p>Coin 3 produces: 3, 6, <strong>9</strong>, 12, etc.</p>\n",
+  "markdown": "Coin 3 produces: 3, 6, <u>**9**</u>, 12, etc."
+ },
+ "u_tag_in_code_span": {
+  "github": "<p>The subsequence <code>\"&lt;u&gt;a&lt;/u&gt;b&lt;u&gt;c&lt;/u&gt;\"</code> is valid.</p>\n",
+  "markdown": "The subsequence `\"<u>a</u>b<u>c</u>\"` is valid."
+ }
+}
