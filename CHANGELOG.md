@@ -5,6 +5,27 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The page renders a `question.md` the way GitHub renders it. Tables written as HTML showed
+  as `<tr><td>` text and images did not appear at all, which is what prompted this; fixing
+  only those two would have left the rest of the gap, so the renderer was rebuilt against
+  GitHub's own output as the reference. It now handles images, HTML tables (keeping the tag,
+  dropping every attribute), nested and loose lists, hard line breaks, bare URLs, indented
+  code, fenced code with a language, setext headings, table alignment and escaped pipes,
+  entities, backslash escapes and strikethrough. Emphasis uses CommonMark's delimiter-run
+  algorithm rather than a chain of patterns, because LeetCode's statements contain
+  overlapping runs such as `*the **smallest* *subsequence** of*` that a pattern chain closes
+  in the wrong order, emitting tags that cross. Tags GitHub does not permit are dropped with
+  their text kept, as GitHub drops them - `<u>` among them. A raw `<a>` or `<img>` keeps one
+  attribute, its `href` or `src`, and only one `safeUrl` accepts: for those two the attribute
+  is the content, and dropping it would not be the same document. Every other attribute on
+  every tag is dropped, which is what leaves no room for an `onerror=`.
+- `tests/fixtures/github_markdown.json` records GitHub's rendering of every construct these
+  files contain, and a test holds the page to it. The samples are taken from real problem
+  statements, so the fixture is evidence rather than invention; regenerate it with
+  `tests/fixtures/gen_github_markdown.py`.
+
 ## [0.19.0] - 2026-09-09
 
 ### Added

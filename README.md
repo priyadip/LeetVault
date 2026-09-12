@@ -289,7 +289,9 @@ It publishes at `https://<you>.github.io/<repo>/` and gives you:
 - **syntax-highlighted code**, with the colour scheme chosen in Settings;
 - **five pane arrangements** - three columns, two-left, two-right, one-top, three rows -
   each remembering its own sizes;
-- collapsible **hints**, rendered the way GitHub renders them;
+- collapsible **hints**, tables, images and everything else **rendered exactly as GitHub
+  renders the same file** - the page links to GitHub on every problem, so the two showing
+  different documents would read as one of them being broken;
 - a **light/dark switch** that follows your system until you choose otherwise, and a
   **sidebar you can fold away** (or press `\`) when you want the whole window.
 
@@ -306,7 +308,12 @@ embedded in a public page.
 
 The page is plain HTML, CSS and JavaScript with no build step and no CDN - including its
 Markdown renderer and syntax highlighter - so a repo that still exists in five years still
-renders. Asset URLs carry a content hash, so an update is never served from a stale cache.
+renders. Writing the renderer by hand puts the burden of correctness on this project, so it
+is held to GitHub's own output: `tests/fixtures/github_markdown.json` records how GitHub
+renders every construct these files contain - images, HTML tables with attributes, nested
+and loose lists, hints, and the overlapping emphasis runs LeetCode writes - and a test
+compares the page against it. Asset URLs carry a content hash, so an update is never served
+from a stale cache.
 
 ## Command reference
 

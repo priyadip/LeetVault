@@ -13,107 +13,490 @@ let VIEW = [];      // problems after search/filter, in display order
 let CURRENT = null; // slug of the open problem
 
 /* ---------- Markdown ---------------------------------------------------- */
-/* Deliberately small and self-contained. It covers what these files actually contain -
- * headings, fenced code, tables, lists, emphasis, links, quotes - and escapes everything
- * first, because analysis.md is model-generated text and notes.md is free-form. */
+/* Hand-written for the same reason as the highlighter: no CDN, no build step, still working
+ * in five years. The target is not "some Markdown" but a specific one - whatever GitHub
+ * renders for the same file. Every problem here is also readable on GitHub, and a reader
+ * moving between the two should not meet two different documents. tests/test_site.py pins
+ * that claim against GitHub's own renderer on real problem files.
+ *
+ * Two passes. The inline pass hides code spans, escapes, rebuilt tags and finished links
+ * behind sentinels before the emphasis rules run, so an asterisk inside backticks and an
+ * underscore inside a URL are never mistaken for markup. The block pass is recursive: a list
+ * item's body is parsed as its own document, which is what makes nested lists and
+ * multi-paragraph items fall out of the design instead of needing cases of their own. */
+
+/* The tags GitHub keeps. It renders these and silently drops any other well-formed tag,
+ * keeping the text inside it - which is why <u> is absent here even though LeetCode writes
+ * it: GitHub strips it, so underlining a matched subsequence would be this page showing
+ * something the file on GitHub does not.
+ *
+ * Tags are rebuilt rather than passed through: the name must appear here and every attribute
+ * is dropped on the way, so the <th style="border: 1px solid black;"> these files contain
+ * still renders, while an onerror= or an href="javascript:" cannot survive a rebuild that
+ * emits the name alone. `img` is deliberately absent: images are built from Markdown
+ * ![](...) with the source checked by safeUrl, never lifted out of raw HTML. */
+const SAFE_TAGS = new Set([
+  "details", "summary",
+  "table", "thead", "tbody", "tfoot", "caption", "colgroup", "col", "tr", "th", "td",
+  "b", "i", "em", "strong", "code", "sub", "sup", "kbd", "s", "strike", "del", "ins",
+  "mark", "small", "cite", "abbr", "q", "samp", "var", "tt", "br", "hr",
+]);
+
+const FENCE = /^\s{0,3}(`{3,}|~{3,})\s*([A-Za-z0-9+#._-]*)\s*$/;
+const ATX = /^\s{0,3}(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/;
+const HR = /^\s{0,3}(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$/;
+// The marker may be the whole line: "-" on its own is an empty list item, not a paragraph.
+const LIST = /^(\s*)([-*+]|\d{1,9}[.)])(\s+|$)(.*)$/;
+const LIST_START = /^ {0,3}([-*+]|[0-9]{1,9}[.)])( |$)/;
+const QUOTE = /^\s{0,3}>\s?/;
+const ROW = /^\s*\|.*\|\s*$/;
+const DELIM = /^\s*\|[\s:|-]+\|\s*$/;
+// A tag, with nothing angled inside it: "x<smi" followed by a distant ">" is not one, and
+// GitHub leaves it visible rather than swallowing the text between.
+const TAG = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)([^<>]*)>/g;
+
+/* The sentinel is a NUL: no document contains one, and esc() leaves it alone. It is built
+ * rather than written so this file stays plain ASCII. */
+const MARK = String.fromCharCode(0);
+const SENTINEL = new RegExp(MARK + "([0-9]+)" + MARK, "g");
+
+/* Language names as written on a fence, mapped to the extensions the highlighter knows, so a
+ * python block inside an analysis is coloured like the submission it discusses. */
+const FENCE_LANG = {
+  python: "py", python3: "py", py: "py", ruby: "rb", rb: "rb",
+  java: "java", kotlin: "kt", kt: "kt", csharp: "cs", "c#": "cs", cs: "cs",
+  cpp: "cpp", "c++": "cpp", cxx: "cpp", cc: "cpp", c: "c",
+  javascript: "js", js: "js", node: "js", typescript: "ts", ts: "ts",
+  go: "go", golang: "go", rust: "rs", rs: "rs",
+};
+
 function esc(s) {
   return s.replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 
+/* A link target is allowed when it is plainly external (http, https, mailto), a fragment, or
+ * relative - which is to say it names no scheme at all. Everything else is refused and the
+ * text left unlinked; javascript: is the reason this function exists. */
+function safeUrl(u) {
+  return /^(?:https?:\/\/|mailto:|#|[^a-zA-Z]|[^:]*$)/i.test(u) ? u : null;
+}
+
+// The href or src of a raw HTML tag, if safeUrl accepts it - quoted either way or bare,
+// which is how someone writing one by hand actually writes it.
+function attrUrl(attrs) {
+  const m = /(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i.exec(attrs || "");
+  const raw = m ? (m[1] !== undefined ? m[1] : m[2] !== undefined ? m[2] : m[3]) : "";
+  return raw && safeUrl(raw) ? esc(raw) : null;
+}
+function anchor(href, text) {
+  return '<a href="' + href + '" target="_blank" rel="noopener">' + text + "</a>";
+}
+
+/* Emphasis, kept apart from the rest of the inline pass so link text can be run through it
+ * too - GitHub renders [**bold**](url) with the bold intact.
+ *
+ * This is CommonMark's delimiter-run algorithm rather than a chain of regular expressions.
+ * That is not gold-plating: LeetCode's own statements contain overlapping runs, such as
+ * "return *the **lexicographically smallest* *subsequence** of*", and a regex chain closes
+ * those in the wrong order and emits tags that cross - which no browser renders the way
+ * GitHub does. Three rules carry the weight. A run may open only if it is left-flanking and
+ * close only if it is right-flanking; an underscore may additionally do neither inside a
+ * word, so snake_case survives; and a pair whose lengths sum to a multiple of three is
+ * refused unless both lengths are themselves multiples of three. */
+const PUNCT = /[!-\/:-@\[-`{-~]/;
+
+/* A delimiter run's two properties, from the characters on either side of it. "Left" means
+ * it could begin emphasis, "right" that it could end it - a run is often both, which is
+ * exactly why the pairing below needs an algorithm rather than a pattern. */
+function flanking(s, start, end) {
+  const before = start > 0 ? s[start - 1] : " ";
+  const after = end < s.length ? s[end] : " ";
+  const beforeSpace = /\s/.test(before);
+  const afterSpace = /\s/.test(after);
+  // A held fragment - a code span, a link, a rebuilt tag - stands where punctuation
+  // stood in the source, and CommonMark decides flanking from that character. Counting
+  // the sentinel as punctuation is what lets a `span` followed by *.* emphasise at all.
+  const beforePunct = before === MARK || PUNCT.test(before);
+  const afterPunct = after === MARK || PUNCT.test(after);
+  return {
+    left: !afterSpace && (!afterPunct || beforeSpace || beforePunct),
+    right: !beforeSpace && (!beforePunct || afterSpace || afterPunct),
+    beforePunct,
+    afterPunct,
+  };
+}
+
+function delimiters(s) {
+  const nodes = [];
+  let text = "";
+  let i = 0;
+  while (i < s.length) {
+    const ch = s[i];
+    if (ch !== "*" && ch !== "_" && ch !== "~") { text += ch; i++; continue; }
+    let j = i;
+    while (j < s.length && s[j] === ch) j++;
+    // GFM strikethrough is one or two tildes; a longer run is literal text.
+    if (ch === "~" && j - i > 2) { text += s.slice(i, j); i = j; continue; }
+    if (text) { nodes.push({ text }); text = ""; }
+    const f = flanking(s, i, j);
+    nodes.push({
+      ch,
+      n: j - i,
+      size: j - i,
+      open: ch === "_" ? f.left && (!f.right || f.beforePunct) : f.left,
+      close: ch === "_" ? f.right && (!f.left || f.afterPunct) : f.right,
+      dead: false,
+      opens: [],
+      closes: [],
+    });
+    i = j;
+  }
+  if (text) nodes.push({ text });
+  return nodes;
+}
+
+function emph(s) {
+  const nodes = delimiters(s);
+
+  for (let c = 0; c < nodes.length; c++) {
+    const closer = nodes[c];
+    if (!closer.ch || closer.dead || !closer.close || closer.n === 0) continue;
+
+    let o = -1;
+    for (let k = c - 1; k >= 0; k--) {
+      const cand = nodes[k];
+      if (!cand.ch || cand.dead || cand.n === 0) continue;
+      if (cand.ch !== closer.ch || !cand.open) continue;
+      // The rule of three, which is what keeps "***x***" and its malformed cousins nesting
+      // the way GitHub nests them.
+      const both = (closer.open && closer.close) || (cand.open && cand.close);
+      if (both && (cand.size + closer.size) % 3 === 0 &&
+          !(cand.size % 3 === 0 && closer.size % 3 === 0)) continue;
+      o = k;
+      break;
+    }
+    if (o === -1) {
+      if (!closer.open) closer.dead = true;
+      continue;
+    }
+
+    const opener = nodes[o];
+    const strong = closer.ch !== "~" && opener.n >= 2 && closer.n >= 2;
+    const used = closer.ch === "~" ? Math.min(opener.n, closer.n) : strong ? 2 : 1;
+    const tag = closer.ch === "~" ? "del" : strong ? "strong" : "em";
+    opener.n -= used;
+    closer.n -= used;
+    // Matches are found innermost first, so the opener's tags accumulate outermost-first and
+    // the closer's innermost-first; emitting each list in order then nests them correctly.
+    opener.opens.unshift(tag);
+    closer.closes.push(tag);
+    // Delimiters skipped over can never pair with anything now.
+    for (let k = o + 1; k < c; k++) if (nodes[k].ch) nodes[k].dead = true;
+    if (closer.n > 0) c--;
+  }
+
+  let out = "";
+  for (const node of nodes) {
+    if (!node.ch) { out += node.text; continue; }
+    out += node.closes.map((t) => "</" + t + ">").join("");
+    out += node.ch.repeat(node.n);
+    out += node.opens.map((t) => "<" + t + ">").join("");
+  }
+  return out;
+}
+
 function inline(s) {
-  return esc(s)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
-    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const held = [];
+  const hold = (html) => MARK + (held.push(html) - 1) + MARK;
+
+  // Code spans and backslash escapes leave the text before anything else and return at the
+  // very end, so markup written inside them is shown rather than applied - which is what
+  // GitHub does for `<u>a</u>`, and the reason several problems can describe a subsequence
+  // at all.
+  let t = String(s)
+    // A line ending inside a code span is a space, not a break. GFM says so, and a statement
+    // that writes its mapping across two lines depends on it.
+    .replace(/(`+)([\s\S]*?)\1/g, (_, __, code) =>
+      hold("<code>" + esc(code.replace(/\n/g, " ")) + "</code>"))
+    .replace(/\\([\\`*_{}[\]()#+\-.!|~>])/g, (_, ch) => hold(esc(ch)))
+    // Two trailing spaces, or a backslash, before a line ending is a hard break; every other
+    // line ending inside a paragraph is just a space.
+    .replace(/(?: {2,}|\\)\n/g, () => hold("<br>"))
+    .replace(/\n/g, " ");
+
+  // Tags are settled here, on the raw text, where a "<" is still a "<". Keeping one means
+  // holding it: esc() below must not reach what has just been rebuilt.
+  let anchors = 0;
+  t = t.replace(TAG, (_, slash, name, attrs) => {
+    const tag = name.toLowerCase();
+    if (tag !== "a" && tag !== "img") {
+      return SAFE_TAGS.has(tag) ? hold("<" + slash + tag + ">") : "";
+    }
+    // These two are the exception to dropping every attribute, because for them the
+    // attribute is the content: an anchor without its href and an image without its src are
+    // not the same document. Exactly one attribute survives on each, and only the one
+    // safeUrl accepts - a closing </a> is kept only where an opening tag was.
+    if (tag === "a" && slash) {
+      if (!anchors) return "";
+      anchors -= 1;
+      return hold("</a>");
+    }
+    const url = attrUrl(attrs);
+    if (!url) return "";
+    if (tag === "img") return hold('<img src="' + url + '" alt="" loading="lazy">');
+    anchors += 1;
+    return hold('<a href="' + url + '" target="_blank" rel="noopener">');
+  });
+
+  t = esc(t)
+    // An entity the author wrote stays an entity: esc() has just turned its ampersand into
+    // &amp;, which would otherwise show the reader &lt; where GitHub shows <.
+    .replace(/&amp;(#[0-9]+|#x[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]{1,31});/g, "&$1;");
+
+  // Images before links - the two syntaxes differ by a leading "!", so the link rule would
+  // otherwise claim the bracket pair and leave a stray "!" in front of an anchor. All three
+  // results are held, because a URL must not reach the emphasis rules: the underscores in
+  // one would come back as <em>.
+  t = t
+    .replace(/!\[([^\]]*)\]\(\s*([^)\s]+)(?:\s+[^)]*)?\)/g, (m, alt, src) => {
+      const url = safeUrl(src);
+      return url ? hold('<img src="' + url + '" alt="' + alt + '" loading="lazy">') : m;
+    })
+    .replace(/\[([^\]]+)\]\(\s*([^)\s]*)(?:\s+[^)]*)?\)/g, (m, text, href) => {
+      const url = safeUrl(href);
+      return url ? hold(anchor(url, emph(text))) : m;
+    })
+    // Bare URLs are links on GitHub. Trailing sentence punctuation is left outside, so a URL
+    // that ends a sentence does not swallow the full stop.
+    .replace(/(^|[\s(])(https?:\/\/[^\s<>()]*[^\s<>().,;:!?])/g, (_, pre, url) =>
+      pre + hold(anchor(url, url)));
+
+  t = emph(t);
+
+  // Held fragments can contain sentinels of their own - a code span inside a link - so this
+  // runs until none are left rather than once. Indices only point backwards, so it ends.
+  for (let pass = 0; pass < 8 && t.indexOf(MARK) !== -1; pass++) {
+    t = t.replace(SENTINEL, (_, n) => held[n]);
+  }
+  return t;
+}
+
+function codeBlock(code, lang) {
+  const ext = FENCE_LANG[(lang || "").toLowerCase()];
+  return '<pre><code class="code">' + (ext ? highlight(code, ext) : esc(code)) + "</code></pre>";
+}
+
+// Splits one table row, honouring an escaped pipe inside a cell - the only way a pipe can
+// appear in a table without ending the cell.
+function cells(row) {
+  const s = row.trim().replace(/^\|/, "").replace(/\|$/, "");
+  const parts = [];
+  let cur = "";
+  for (let k = 0; k < s.length; k++) {
+    if (s[k] === "\\" && s[k + 1] === "|") { cur += "|"; k++; }
+    else if (s[k] === "|") { parts.push(cur); cur = ""; }
+    else cur += s[k];
+  }
+  parts.push(cur);
+  return parts.map((c) => c.trim());
+}
+
+// A GFM table runs to the first blank line or the start of another block - anything else,
+// even a line with no pipes in it, is one more row.
+function startsBlock(l) {
+  return !l.trim() || ATX.test(l) || FENCE.test(l) || HR.test(l) || QUOTE.test(l) ||
+    LIST_START.test(l) || /^\s{0,3}<\/?[a-zA-Z]/.test(l);
 }
 
 function markdown(src) {
-  const lines = (src || "").replace(/\r\n?/g, "\n").split("\n");
+  return blocks((src || "").replace(/\r\n?/g, "\n").split("\n"));
+}
+
+/* `tight` is set for the items of a tight list, where GitHub renders an item's paragraphs
+ * without their <p> wrapper. It is decided once for the whole list, so its items are spaced
+ * evenly, and it does not reach a nested list - that one decides for itself. */
+function blocks(lines, tight) {
   const out = [];
-  let i = 0, para = [];
+  let para = [];
+  let i = 0;
 
   const flush = () => {
-    if (para.length) { out.push("<p>" + inline(para.join(" ")) + "</p>"); para = []; }
+    if (!para.length) return;
+    // Leading indentation is not content, but trailing spaces are - two of them are a hard
+    // break. The paragraph goes through the inline pass whole rather than line by line, so a
+    // code span or a link may run across a line ending, as they do on GitHub.
+    const html = inline(para.map((l) => l.replace(/^ +/, "")).join("\n"));
+    out.push(tight ? html : "<p>" + html + "</p>");
+    para = [];
   };
 
   while (i < lines.length) {
     const line = lines[i];
 
-    const fence = line.match(/^```(\w*)/);
-    if (fence) {                                   // fenced code
+    const fence = line.match(FENCE);
+    if (fence) {
       flush();
+      const close = new RegExp("^\\s{0,3}" + fence[1][0] + "{" + fence[1].length + ",}\\s*$");
       const body = [];
       i++;
-      while (i < lines.length && !/^```/.test(lines[i])) body.push(lines[i++]);
+      while (i < lines.length && !close.test(lines[i])) body.push(lines[i++]);
       i++;
-      out.push(`<pre><code class="code">${esc(body.join("\n"))}</code></pre>`);
+      out.push(codeBlock(body.join("\n"), fence[2]));
       continue;
     }
 
-    if (/^\s*\|.*\|\s*$/.test(line) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1] || "")) {
-      flush();                                     // table
-      const cells = (r) => r.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+    // Four spaces is a code block only where no paragraph is open; indented text under one is
+    // a continuation of it. List items never reach here - their bodies are parsed separately,
+    // with the item's indentation already removed.
+    if (!para.length && line.trim() && /^ {4}\S/.test(line)) {
+      const body = [];
+      while (i < lines.length && (/^ {4}/.test(lines[i]) ||
+             (!lines[i].trim() && /^ {4}\S/.test(lines[i + 1] || "")))) {
+        body.push(lines[i++].replace(/^ {4}/, ""));
+      }
+      out.push(codeBlock(body.join("\n"), ""));
+      continue;
+    }
+
+    // Setext headings, before the horizontal rule: a row of dashes under a paragraph
+    // underlines it, while the same row after a blank line is a rule.
+    if (para.length && /^\s{0,3}=+\s*$/.test(line)) {
+      const text = para.join(" ").trim();
+      para = [];
+      i++;
+      out.push("<h1>" + inline(text) + "</h1>");
+      continue;
+    }
+    if (para.length && /^\s{0,3}-+\s*$/.test(line)) {
+      const text = para.join(" ").trim();
+      para = [];
+      i++;
+      out.push("<h2>" + inline(text) + "</h2>");
+      continue;
+    }
+
+    const heading = line.match(ATX);
+    if (heading) {
+      flush();
+      const n = heading[1].length;
+      out.push("<h" + n + ">" + inline(heading[2]) + "</h" + n + ">");
+      i++;
+      continue;
+    }
+
+    if (HR.test(line)) { flush(); out.push("<hr>"); i++; continue; }
+
+    // Raw HTML. Hints arrive as <details>/<summary>, which stay one line each so the Markdown
+    // between them is still parsed - that is how GitHub renders them, and it is what makes a
+    // hint body readable. A <table> is taken whole, since its content is HTML.
+    const name = (line.match(/^\s*<(\/?[a-zA-Z][a-zA-Z0-9]*)/) || [])[1];
+    const opener = (name || "").toLowerCase();
+    if (opener === "table") {
+      flush();
+      const block = [];
+      while (i < lines.length && !/<\/table\s*>/i.test(lines[i])) block.push(lines[i++]);
+      if (i < lines.length) block.push(lines[i++]);
+      out.push(inline(block.join("\n")));
+      continue;
+    }
+    if (opener === "details" || opener === "/details" || opener === "summary") {
+      flush();
+      out.push(inline(line.trim()));
+      i++;
+      continue;
+    }
+
+    const delim = DELIM.test(lines[i + 1] || "") ? cells(lines[i + 1]) : null;
+    if (ROW.test(line) && delim && delim.length === cells(line).length) {
+      flush();
       const head = cells(line);
+      const align = delim.map((c) =>
+        /^:-+:$/.test(c) ? "center" : /^-+:$/.test(c) ? "right" : /^:-+$/.test(c) ? "left" : "");
+      const cell = (tag, text, n) =>
+        "<" + tag + (align[n] ? ' style="text-align:' + align[n] + '"' : "") + ">" +
+        inline(text || "") + "</" + tag + ">";
       i += 2;
       const rows = [];
-      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) rows.push(cells(lines[i++]));
-      out.push("<table><thead><tr>" + head.map((h) => `<th>${inline(h)}</th>`).join("") +
+      while (i < lines.length && !startsBlock(lines[i])) rows.push(cells(lines[i++]));
+      // Every row is padded or truncated to the header's width, which is what GitHub does
+      // with a trailing line that was never meant to be a row at all.
+      out.push("<table><thead><tr>" + head.map((h, n) => cell("th", h, n)).join("") +
         "</tr></thead><tbody>" +
-        rows.map((r) => "<tr>" + r.map((c) => `<td>${inline(c)}</td>`).join("") + "</tr>").join("") +
+        rows.map((r) => "<tr>" + head.map((_, n) => cell("td", r[n], n)).join("") + "</tr>")
+          .join("") +
         "</tbody></table>");
       continue;
     }
 
-    // LeetCode's hints arrive as <details>/<summary>, which GitHub renders natively.
-    // Escaping them shows the reader raw markup, so exactly these three forms pass through
-    // - they carry no scripting and no attributes - while every other tag stays escaped.
-    if (/^\s*<details>\s*$/i.test(line)) { flush(); out.push("<details>"); i++; continue; }
-    if (/^\s*<\/details>\s*$/i.test(line)) { flush(); out.push("</details>"); i++; continue; }
-    const summary = line.match(/^\s*<summary>(.*)<\/summary>\s*$/i);
-    if (summary) {
-      flush();
-      out.push(`<summary>${inline(summary[1])}</summary>`);
-      i++;
-      continue;
-    }
-
-    const heading = line.match(/^(#{1,6})\s+(.*)$/);
-    if (heading) {
-      flush();
-      out.push(`<h${heading[1].length}>${inline(heading[2])}</h${heading[1].length}>`);
-      i++; continue;
-    }
-
-    if (/^\s*([-*+]|\d+\.)\s+/.test(line)) {       // list
-      flush();
-      const ordered = /^\s*\d+\./.test(line);
-      const items = [];
-      // Stop when the marker type changes: a numbered list following a bulleted one is a
-      // second list, and merging them renumbers content the author wrote deliberately.
-      const sameKind = (l) => /^\s*([-*+]|\d+\.)\s+/.test(l) && /^\s*\d+\./.test(l) === ordered;
-      while (i < lines.length && sameKind(lines[i])) {
-        items.push(lines[i++].replace(/^\s*([-*+]|\d+\.)\s+/, ""));
-      }
-      const tag = ordered ? "ol" : "ul";
-      out.push(`<${tag}>` + items.map((t) => `<li>${inline(t)}</li>`).join("") + `</${tag}>`);
-      continue;
-    }
-
-    if (/^\s*>\s?/.test(line)) {
+    if (QUOTE.test(line)) {
       flush();
       const quote = [];
-      while (i < lines.length && /^\s*>\s?/.test(lines[i])) quote.push(lines[i++].replace(/^\s*>\s?/, ""));
-      out.push("<blockquote>" + markdown(quote.join("\n")) + "</blockquote>");
+      while (i < lines.length && QUOTE.test(lines[i])) quote.push(lines[i++].replace(QUOTE, ""));
+      out.push("<blockquote>" + blocks(quote) + "</blockquote>");
       continue;
     }
 
-    if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { flush(); out.push("<hr>"); i++; continue; }
+    const item = line.match(LIST);
+    if (item && item[1].length <= 3) {
+      flush();
+      const indent = item[1].length;
+      const ordered = /[0-9]/.test(item[2]);
+      const start = ordered ? parseInt(item[2], 10) : 1;
+      const items = [];
+      let loose = false;
+
+      while (i < lines.length) {
+        // Blank lines between items belong to the list, and their presence is what makes it
+        // loose; the item after them is still part of it.
+        let j = i;
+        while (j < lines.length && !lines[j].trim()) j++;
+        const m = j < lines.length ? lines[j].match(LIST) : null;
+        if (!m || m[1].length !== indent || /[0-9]/.test(m[2]) !== ordered) break;
+        if (j > i) loose = true;
+        i = j;
+
+        const col = m[1].length + m[2].length + (m[3].length || 1);
+        const body = [m[4]];
+        i++;
+
+        while (i < lines.length) {
+          const l = lines[i];
+          if (!l.trim()) {
+            // A blank run keeps the item only if content indented to its column follows;
+            // otherwise it is left for the loop above to judge.
+            let k = i;
+            while (k < lines.length && !lines[k].trim()) k++;
+            if (k >= lines.length || lines[k].slice(0, col).trim() !== "") break;
+            loose = true;
+            while (i < k) { body.push(""); i++; }
+            continue;
+          }
+          if (l.slice(0, col).trim() === "") { body.push(l.slice(col)); i++; continue; }
+          // A line that is neither indented to the content column nor the start of another
+          // block is a lazy continuation of the item's paragraph - how a long constraint
+          // wraps in these files.
+          if (!startsBlock(l) && !ROW.test(l) && body.length && body[body.length - 1].trim()) {
+            body.push(l.replace(/^ +/, ''));
+            i++;
+            continue;
+          }
+          break;
+        }
+        items.push(body);
+      }
+
+      const tag = ordered ? "ol" : "ul";
+      const attr = ordered && start !== 1 ? ' start="' + start + '"' : "";
+      out.push("<" + tag + attr + ">" +
+        items.map((body) => "<li>" + blocks(body, !loose) + "</li>").join("") +
+        "</" + tag + ">");
+      continue;
+    }
+
     if (!line.trim()) { flush(); i++; continue; }
 
-    para.push(line.trim());
+    para.push(line);
     i++;
   }
   flush();
