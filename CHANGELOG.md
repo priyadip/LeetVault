@@ -5,6 +5,7 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-09-12
 ### Fixed
 
 - The page renders a `question.md` the way GitHub renders it. Tables written as HTML showed
@@ -581,7 +582,8 @@ Initial release.
 - `watch`: polling loop with graceful shutdown and session-expiry warnings.
 - `config`: get/set persistent settings.
 
-[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/priyadip/LeetVault/compare/v0.19.1...HEAD
+[0.19.1]: https://github.com/priyadip/LeetVault/compare/v0.19.0...v0.19.1
 [0.19.0]: https://github.com/priyadip/LeetVault/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/priyadip/LeetVault/compare/v0.17.1...v0.18.0
 [0.17.1]: https://github.com/priyadip/LeetVault/compare/v0.17.0...v0.17.1
